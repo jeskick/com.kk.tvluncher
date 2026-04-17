@@ -42,9 +42,22 @@ export STORE_PASSWORD=your_store_password
 export KEY_PASSWORD=your_key_password
 ```
 
-### 3. 配置天气（可选）
+### 3. 配置本地参数（可选）
 
-在 `app/src/main/java/com/kk/data/WeatherRepository.kt` 中将 `DEFAULT_API_KEY` 替换为你的[和风天气 API Key](https://dev.qweather.com/)，也可直接在 App 设置界面中填写。
+在项目根目录创建 `local.properties`（已加入 `.gitignore`，不会提交），追加以下内容：
+
+```properties
+# SMB 壁纸目录
+smb.dir=smb://192.168.x.x/share/
+smb.user=your_smb_username
+smb.pass=your_smb_password
+
+# 和风天气（https://dev.qweather.com/）
+weather.key=your_qweather_api_key
+weather.city=北京
+```
+
+> 不配置也没关系，App 首次启动后在**设置界面**手动填写同样有效，填写后会永久保存。
 
 ### 4. 编译
 
