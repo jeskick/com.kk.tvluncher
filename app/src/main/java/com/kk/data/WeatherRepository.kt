@@ -54,11 +54,11 @@ class WeatherRepository {
                 val d3Json = get("https://$API_HOST/v7/weather/7d?location=$locationId&key=$apiKey&lang=zh")
                 val daily = d3Json.getJSONArray("daily")
 
-                val dayNames = listOf("今天", "明天", "后天")
+                val dayNames = listOf("今天", "明天", "后天", "第4天", "第5天")
                 val forecast = (0 until minOf(5, daily.length())).map { i ->
                     val d = daily.getJSONObject(i)
                     ForecastDay(
-                        dayName = dayNames[i],
+                        dayName = dayNames.getOrElse(i) { "第${i+1}天" },
                         maxTemp = d.getString("tempMax").toIntOrNull() ?: 0,
                         minTemp = d.getString("tempMin").toIntOrNull() ?: 0,
                         weatherCode = qweatherIconToCode(d.getString("iconDay"))
@@ -75,7 +75,7 @@ class WeatherRepository {
                     forecast = forecast
                 )
                 result
-            }.getOrElse { e ->
+            }.getOrElse { _ ->
                 mockWeather(city)
             }
         }
@@ -107,12 +107,15 @@ class WeatherRepository {
         val rawStream = if (code in 200..299) conn.inputStream
                         else conn.errorStream ?: return JSONObject()
         val encoding = conn.contentEncoding ?: ""
-        val body = if (encoding.equals("gzip", ignoreCase = true)) {
-            java.util.zip.GZIPInputStream(rawStream).bufferedReader(Charsets.UTF_8).readText()
-        } else {
-            rawStream.bufferedReader(Charsets.UTF_8).readText()
+        val body = try {
+            if (encoding.equals("gzip", ignoreCase = true)) {
+                java.util.zip.GZIPInputStream(rawStream).use { it.bufferedReader(Charsets.UTF_8).readText() }
+            } else {
+                rawStream.use { it.bufferedReader(Charsets.UTF_8).readText() }
+            }
+        } finally {
+            conn.disconnect()
         }
-        conn.disconnect()
         return runCatching { JSONObject(body) }.getOrDefault(JSONObject())
     }
 
