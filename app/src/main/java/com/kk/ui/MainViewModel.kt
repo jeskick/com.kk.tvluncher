@@ -3,6 +3,7 @@ package com.kk.tvlauncher.ui
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import com.kk.tvlauncher.BuildConfig
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -77,7 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ── 天气 ──────────────────────────────────────────────────────────────────
 
     fun loadWeather() {
-        val city   = prefs.getString("weather_city", "") ?: ""
+        val city   = prefs.getString("weather_city", BuildConfig.DEFAULT_WEATHER_CITY) ?: BuildConfig.DEFAULT_WEATHER_CITY
         val apiKey = prefs.getString("weather_api_key", null)
             ?.takeIf { it.isNotBlank() }
             ?: WeatherRepository.DEFAULT_API_KEY
@@ -242,13 +243,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val DEFAULT_BG        = "file:///android_asset/wallpapers/minecraft-tiny.jpg"
         /** WebDAV 地址（在设置界面配置，格式：https://NAS_IP:PORT/path/） */
         const val DEFAULT_WEBDAV_DIR = ""
-        /** SMB 共享目录（在设置界面中配置，格式：smb://NAS_IP/share/） */
-        const val DEFAULT_SMBJ_DIR   = ""
-        /** SMB 备用路径格式（UNC 路径） */
-        const val DEFAULT_SMB_DIR   = ""
-        /** 默认凭据（建议在设置界面中配置，不要硬编码） */
-        const val DEFAULT_SMB_USER = ""
-        const val DEFAULT_SMB_PASS = ""
+        /** SMB 共享目录（优先读 local.properties，其次设置界面） */
+        val DEFAULT_SMBJ_DIR   get() = BuildConfig.DEFAULT_SMB_DIR.ifBlank { "" }
+        val DEFAULT_SMB_DIR    get() = BuildConfig.DEFAULT_SMB_DIR.ifBlank { "" }
+        val DEFAULT_SMB_USER   get() = BuildConfig.DEFAULT_SMB_USER.ifBlank { "" }
+        val DEFAULT_SMB_PASS   get() = BuildConfig.DEFAULT_SMB_PASS.ifBlank { "" }
     }
 
     fun addToDock(packageName: String) { dockRepo.addApp(packageName); loadDock() }

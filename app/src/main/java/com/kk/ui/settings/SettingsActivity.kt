@@ -3,6 +3,7 @@ package com.kk.tvlauncher.ui.settings
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import com.kk.tvlauncher.BuildConfig
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -84,7 +85,7 @@ class SettingsActivity : FragmentActivity() {
         }
         binding.tvBuiltinWallpaper.text = builtinWallpaperMap[selectedBuiltin] ?: selectedBuiltin
 
-        binding.etWeatherCity.setText(prefs.getString("weather_city", ""))
+        binding.etWeatherCity.setText(prefs.getString("weather_city", BuildConfig.DEFAULT_WEATHER_CITY))
         binding.etWeatherApiKey.setText(prefs.getString("weather_api_key", ""))
 
         // SMB 路径迁移

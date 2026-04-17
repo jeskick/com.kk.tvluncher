@@ -15,6 +15,16 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+
+        // 从 local.properties 注入默认配置（不提交到 git）
+        val localProps = Properties()
+        val localFile = rootProject.file("local.properties")
+        if (localFile.exists()) localProps.load(localFile.inputStream())
+        buildConfigField("String", "DEFAULT_SMB_DIR",  "\"${localProps.getProperty("smb.dir",  "")}\"")
+        buildConfigField("String", "DEFAULT_SMB_USER", "\"${localProps.getProperty("smb.user", "")}\"")
+        buildConfigField("String", "DEFAULT_SMB_PASS", "\"${localProps.getProperty("smb.pass", "")}\"")
+        buildConfigField("String", "DEFAULT_WEATHER_KEY", "\"${localProps.getProperty("weather.key", "")}\"")
+        buildConfigField("String", "DEFAULT_WEATHER_CITY", "\"${localProps.getProperty("weather.city", "")}\"")
     }
 
     lint {
@@ -65,6 +75,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 

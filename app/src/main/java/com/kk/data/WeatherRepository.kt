@@ -1,6 +1,7 @@
 package com.kk.tvlauncher.data
 
 import android.util.Log
+import com.kk.tvlauncher.BuildConfig
 import com.kk.tvlauncher.model.ForecastDay
 import com.kk.tvlauncher.model.WeatherInfo
 import kotlinx.coroutines.Dispatchers
@@ -12,8 +13,8 @@ class WeatherRepository {
 
     companion object {
         const val API_HOST = "devapi.qweather.com"
-        // 请在设置界面填入你的和风天气 API Key（https://dev.qweather.com/）
-        const val DEFAULT_API_KEY = ""
+        // 优先读 local.properties（smb.key），其次设置界面输入
+        val DEFAULT_API_KEY get() = BuildConfig.DEFAULT_WEATHER_KEY.ifBlank { "" }
 
         /** 常用城市预置 locationId，API 查询失败时兜底 */
         private val CITY_ID_MAP = mapOf(
