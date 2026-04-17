@@ -35,20 +35,27 @@ class KeepAliveService : Service() {
         // ── CPU 部分唤醒锁（保持网络栈活跃，让 ADB 不超时）──────────────────
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG::cpu")
-        wakeLock?.acquire()
+        wakeLock?.acquire(10 * 60 * 1000L)  // 最长持锁 10 分钟，防止意外死锁
 
         // ── 升为前台服务（Android 8+ 必须有通知）────────────────────────────
         startForeground(NOTIF_ID, buildNotification())
 
-        // ── 心跳协程：每 30 秒 ping 网关，防止路由器 NAT 超时 ──────────────
+        // ── 心跳协程：每 30 秒 ping 网关，每 9 分钟续期 WakeLock ───────────
         scope.launch {
             val gateway = getDefaultGateway()
+            var tick = 0
             while (isActive) {
                 delay(HEARTBEAT_MS)
                 try {
-                    val reachable = java.net.InetAddress.getByName(gateway)
-                        .isReachable(3000)
-                } catch (e: Exception) {
+                    java.net.InetAddress.getByName(gateway).isReachable(3000)
+                } catch (_: Exception) { }
+                // 每 18 个心跳（~9分钟）续期 WakeLock，防止 10 分钟超时后失效
+                tick++
+                if (tick >= 18) {
+                    tick = 0
+                    if (wakeLock?.isHeld == false) {
+                        wakeLock?.acquire(10 * 60 * 1000L)
+                    }
                 }
             }
         }

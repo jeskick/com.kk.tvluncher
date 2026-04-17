@@ -23,9 +23,12 @@ object SmbJImageFetcher {
         .withTimeout(15, TimeUnit.SECONDS)
         .withReadTimeout(20, TimeUnit.SECONDS)
         .withDfsEnabled(false)
-        .withDialects(SMB2Dialect.SMB_2_1)   // 显式指定 SMB2.1，避免 SMB3 加密握手问题
+        .withDialects(SMB2Dialect.SMB_2_1)
         .withSigningRequired(false)
         .build()
+
+    /** 单例 SMBClient，内含线程池，避免每次调用都重建 */
+    private val client: SMBClient by lazy { SMBClient(config) }
 
     /**
      * 解析 smb://host/share/path 格式，返回 (host, share, path) 三元组
@@ -76,7 +79,6 @@ object SmbJImageFetcher {
 
 
         return try {
-            val client = SMBClient(config)
             client.connect(host).use { connection ->
                 val auth = if (user.isNotBlank())
                     AuthenticationContext(user, pass.toCharArray(), "")
@@ -86,7 +88,6 @@ object SmbJImageFetcher {
                 val session = connection.authenticate(auth)
                 val diskShare = session.connectShare(share) as DiskShare
 
-                val searchPath = if (dirPath.isEmpty()) "*" else "$dirPath\\*"
                 val files = diskShare.list(dirPath.ifEmpty { "" })
 
                 val result = files.mapNotNull { info ->
@@ -113,7 +114,6 @@ object SmbJImageFetcher {
         val (host, share, filePath) = parseSmbUrl(smbUrl) ?: return null
 
         return try {
-            val client = SMBClient(config)
             client.connect(host).use { connection ->
                 val auth = if (user.isNotBlank())
                     AuthenticationContext(user, pass.toCharArray(), "")

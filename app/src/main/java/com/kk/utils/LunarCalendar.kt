@@ -19,19 +19,30 @@ object LunarCalendar {
         "廿一","廿二","廿三","廿四","廿五","廿六","廿七","廿八","廿九","三十"
     )
 
-    /** 公历 → 农历字符串，如 "三月初一" 或 "闰三月初一" */
+    /** 按 "yyyyMMdd" 缓存结果，同一天只计算一次 */
+    private var cacheKey = ""
+    private var cacheValue = ""
+
+    /** 公历 → 农历字符串，如 "三月初一" 或 "闰三月初一"（按日期缓存，避免重复计算） */
     fun solarToLunar(year: Int, month: Int, day: Int): String {
-        return try {
+        val key = "%04d%02d%02d".format(year, month, day)
+        if (key == cacheKey) return cacheValue
+        val result = try {
             val cal = ChineseCalendar()
             cal.time = java.util.GregorianCalendar(year, month - 1, day).time
-            val lunarMonth = cal.get(ChineseCalendar.MONTH) + 1   // 0-indexed
+            val lunarMonth = cal.get(ChineseCalendar.MONTH) + 1
             val lunarDay   = cal.get(ChineseCalendar.DAY_OF_MONTH)
             val isLeap     = cal.get(ChineseCalendar.IS_LEAP_MONTH) == 1
 
-            if (lunarMonth < 1 || lunarMonth > 12 || lunarDay < 1 || lunarDay > 30) return ""
-            val monthStr = if (isLeap) "闰${monthNames[lunarMonth - 1]}月"
-                           else "${monthNames[lunarMonth - 1]}月"
-            "$monthStr${dayNames[lunarDay - 1]}"
+            if (lunarMonth < 1 || lunarMonth > 12 || lunarDay < 1 || lunarDay > 30) ""
+            else {
+                val monthStr = if (isLeap) "闰${monthNames[lunarMonth - 1]}月"
+                               else "${monthNames[lunarMonth - 1]}月"
+                "$monthStr${dayNames[lunarDay - 1]}"
+            }
         } catch (_: Exception) { "" }
+        cacheKey = key
+        cacheValue = result
+        return result
     }
 }

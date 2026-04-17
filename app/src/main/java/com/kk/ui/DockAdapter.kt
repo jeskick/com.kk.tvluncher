@@ -27,6 +27,16 @@ class DockAdapter(
     var focusColorHex: String = "#CCFFFFFF"
 ) : ListAdapter<DockItem, RecyclerView.ViewHolder>(DockDiffCallback()) {
 
+    /** 初始化时一次性列举 assets/icons/ 目录，避免每次 bind 都做 IO */
+    private var cachedAssetIcons: Set<String> = emptySet()
+
+    fun cacheAssetIcons(context: android.content.Context) {
+        if (cachedAssetIcons.isNotEmpty()) return
+        cachedAssetIcons = try {
+            context.assets.list("icons")?.toHashSet() ?: emptySet()
+        } catch (_: Exception) { emptySet() }
+    }
+
     private fun applyFocusBg(v: View, hasFocus: Boolean) {
         val radius = v.resources.displayMetrics.density * 16
         val gd = GradientDrawable().apply {
@@ -82,8 +92,9 @@ class DockAdapter(
             val ctx = b.root.context
 
             // 优先检查自定义透明图标（assets/icons/<packageName>.png）
-            val customAsset = "icons/${app.packageName}.png"
-            val hasCustom = try { ctx.assets.open(customAsset).close(); true } catch (_: Exception) { false }
+            val assetFile = "${app.packageName}.png"
+            val customAsset = "icons/$assetFile"
+            val hasCustom = cachedAssetIcons.contains(assetFile)
 
             when {
                 hasCustom -> {

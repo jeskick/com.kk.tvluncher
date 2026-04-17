@@ -62,6 +62,7 @@ class AppPickerAdapter(
 
     private class AppDiffCallback : DiffUtil.ItemCallback<AppInfo>() {
         override fun areItemsTheSame(o: AppInfo, n: AppInfo) = o.packageName == n.packageName
-        override fun areContentsTheSame(o: AppInfo, n: AppInfo) = o.appName == n.appName
+        override fun areContentsTheSame(o: AppInfo, n: AppInfo) =
+            o.appName == n.appName && o.icon == n.icon && o.banner == n.banner
     }
 }

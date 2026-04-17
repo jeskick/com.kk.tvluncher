@@ -9,7 +9,7 @@ import com.kk.tvlauncher.data.AppRepository
 import com.kk.tvlauncher.data.DockRepository
 import com.kk.tvlauncher.databinding.ActivityAppPickerBinding
 import com.kk.tvlauncher.ui.MainViewModel
-import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,7 +51,7 @@ class AppPickerActivity : FragmentActivity() {
 
     private fun loadApps() {
         binding.progressBar.visibility = View.VISIBLE
-        CoroutineScope(Dispatchers.Main).launch {
+        lifecycleScope.launch {
             val apps = withContext(Dispatchers.IO) {
                 AppRepository(this@AppPickerActivity).getInstalledApps()
             }
