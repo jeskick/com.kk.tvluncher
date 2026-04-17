@@ -469,6 +469,65 @@
                         android:gravity="center" />
                 </LinearLayout>
 
+                <!-- 壁纸过渡动画 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="壁纸过渡动画"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <Button
+                        android:id="@+id/btnWallpaperTransition"
+                        android:layout_width="140dp"
+                        android:layout_height="42dp"
+                        android:text="淡入淡出"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_top_btn"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <!-- Dock 自动隐藏 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Dock 自动隐藏（秒，0=关闭）"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etDockAutoHide"
+                        android:layout_width="100dp"
+                        android:layout_height="46dp"
+                        android:hint="10"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint"
+                        android:background="@drawable/bg_input"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:textSize="14sp"
+                        android:singleLine="true"
+                        android:inputType="number"
+                        android:gravity="center" />
+                </LinearLayout>
+
                 <!-- 操作按钮 -->
                 <LinearLayout
                     android:layout_width="match_parent"

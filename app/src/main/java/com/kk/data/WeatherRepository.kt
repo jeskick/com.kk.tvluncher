@@ -51,11 +51,11 @@ class WeatherRepository {
                 val now = nowJson.getJSONObject("now")
 
                 // Step 3: 3天预报
-                val d3Json = get("https://$API_HOST/v7/weather/3d?location=$locationId&key=$apiKey&lang=zh")
+                val d3Json = get("https://$API_HOST/v7/weather/7d?location=$locationId&key=$apiKey&lang=zh")
                 val daily = d3Json.getJSONArray("daily")
 
                 val dayNames = listOf("今天", "明天", "后天")
-                val forecast = (0 until minOf(3, daily.length())).map { i ->
+                val forecast = (0 until minOf(5, daily.length())).map { i ->
                     val d = daily.getJSONObject(i)
                     ForecastDay(
                         dayName = dayNames[i],

@@ -103,6 +103,23 @@ class SettingsActivity : FragmentActivity() {
         binding.etSmbUser.setText(prefs.getString("smb_user", MainViewModel.DEFAULT_SMB_USER))
         binding.etSmbPass.setText(prefs.getString("smb_pass", MainViewModel.DEFAULT_SMB_PASS))
         binding.etSlideshowInterval.setText(prefs.getInt("slideshow_interval", 10).toString())
+        binding.etDockAutoHide.setText(prefs.getInt("dock_auto_hide_secs", 10).toString())
+
+        // 壁纸过渡动画
+        val transitionLabels = mapOf("none" to "无动画", "fade" to "淡入淡出", "slow" to "慢淡入")
+        val savedTransition = prefs.getString("wallpaper_transition", "fade") ?: "fade"
+        binding.btnWallpaperTransition.text = transitionLabels[savedTransition] ?: "淡入淡出"
+        binding.btnWallpaperTransition.setOnClickListener {
+            val keys = transitionLabels.keys.toList()
+            val labels = transitionLabels.values.toTypedArray()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("壁纸过渡动画")
+                .setItems(labels) { _, i ->
+                    val chosen = keys[i]
+                    prefs.edit().putString("wallpaper_transition", chosen).apply()
+                    binding.btnWallpaperTransition.text = transitionLabels[chosen]
+                }.show()
+        }
 
         // 透明度
         val alpha = prefs.getInt("ui_alpha", 70)
@@ -207,6 +224,8 @@ class SettingsActivity : FragmentActivity() {
                 .putString("smb_user", binding.etSmbUser.text.toString().trim())
                 .putString("smb_pass", binding.etSmbPass.text.toString())
                 .putInt("slideshow_interval", interval)
+                .putInt("dock_auto_hide_secs",
+                    binding.etDockAutoHide.text.toString().toIntOrNull()?.coerceIn(0, 3600) ?: 10)
                 .putInt("ui_alpha", binding.seekbarAlpha.progress)
                 .putString("focus_color", selectedColorHex)
                 .putString("builtin_wallpaper", selectedBuiltin)

@@ -254,4 +254,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeFromDock(packageName: String) { dockRepo.removeApp(packageName); loadDock() }
     fun launchApp(packageName: String) = appRepo.launchApp(packageName)
     fun getDockPackages(): List<String> = dockRepo.getDockPackages()
+
+    /** 按使用频率重排当前 Dock 列表（不改变持久化顺序，只影响显示） */
+    fun sortDockByUsage(usagePrefs: android.content.SharedPreferences) {
+        val current = _dockItems.value ?: return
+        val apps = current.filterIsInstance<DockItem.App>()
+            .sortedByDescending { usagePrefs.getInt(it.appInfo.packageName, 0) }
+        _dockItems.value = apps + listOf(DockItem.AddButton)
+    }
 }

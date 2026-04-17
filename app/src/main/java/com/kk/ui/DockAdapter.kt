@@ -22,7 +22,8 @@ class DockAdapter(
     private val onAppClick: (String) -> Unit,
     private val onAppLongClick: (String) -> Unit,
     private val onAddClick: () -> Unit,
-    private val onDownKey: () -> Unit,
+    /** 只有右移到最后一个"+"按钮时按下键才触发 */
+    private val onLastItemDownKey: () -> Unit,
     var focusColorHex: String = "#CCFFFFFF"
 ) : ListAdapter<DockItem, RecyclerView.ViewHolder>(DockDiffCallback()) {
 
@@ -127,12 +128,8 @@ class DockAdapter(
                     .setDuration(160)
                     .start()
             }
-            b.root.setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    onDownKey()
-                    true
-                } else false
-            }
+            // 普通 App 项：下键不触发全部应用
+            b.root.setOnKeyListener { _, _, _ -> false }
         }
     }
 
@@ -153,10 +150,10 @@ class DockAdapter(
                     .setDuration(160)
                     .start()
             }
+            // AddButton 是最后一项，下键打开全部应用
             b.root.setOnKeyListener { _, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    onDownKey()
-                    true
+                    onLastItemDownKey(); true
                 } else false
             }
         }

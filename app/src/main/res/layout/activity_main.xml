@@ -131,12 +131,14 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <!-- 天气卡片（左上角） -->
+            <!-- 天气卡片（左上角，可获焦展开） -->
             <androidx.cardview.widget.CardView
                 android:id="@+id/weatherCard"
                 android:layout_width="@dimen/weather_card_width"
                 android:layout_height="wrap_content"
                 android:layout_margin="@dimen/screen_padding"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
                 app:cardCornerRadius="18dp"
                 app:cardBackgroundColor="@color/card_bg"
                 app:cardElevation="0dp"
@@ -282,6 +284,58 @@
                         </LinearLayout>
 
                     </LinearLayout>
+
+                    <!-- 展开区（获焦时显示第4/5天预报） -->
+                    <LinearLayout
+                        android:id="@+id/llWeatherExpanded"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:background="@color/divider" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <!-- 第4天 -->
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                                android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+                                <TextView android:id="@+id/tvForecast4Day"
+                                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                    android:text="--" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                                <TextView android:id="@+id/tvForecast4Icon"
+                                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                    android:text="--" android:textSize="20sp" android:layout_marginTop="2dp" />
+                                <TextView android:id="@+id/tvForecast4Temp"
+                                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                    android:text="--/--" android:textColor="@color/text_primary" android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- 第5天 -->
+                            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+                                android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+                                <TextView android:id="@+id/tvForecast5Day"
+                                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                    android:text="--" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                                <TextView android:id="@+id/tvForecast5Icon"
+                                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                    android:text="--" android:textSize="20sp" android:layout_marginTop="2dp" />
+                                <TextView android:id="@+id/tvForecast5Temp"
+                                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                    android:text="--/--" android:textColor="@color/text_primary" android:textSize="11sp" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

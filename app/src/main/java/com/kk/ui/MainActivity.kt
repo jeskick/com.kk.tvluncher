@@ -1,5 +1,6 @@
 package com.kk.tvlauncher.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -15,6 +16,7 @@ import android.graphics.Rect
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,7 +33,9 @@ import com.kk.tvlauncher.R
 import com.kk.tvlauncher.databinding.ActivityMainBinding
 import com.kk.tvlauncher.ui.picker.AppPickerActivity
 import com.kk.tvlauncher.ui.settings.SettingsActivity
+import com.kk.tvlauncher.utils.LunarCalendar
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -43,15 +47,25 @@ class MainActivity : FragmentActivity() {
     private lateinit var dockAdapter: DockAdapter
     private lateinit var appDrawerAdapter: AppDrawerAdapter
 
-    private val clockHandler = Handler(Looper.getMainLooper())
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var isAppDrawerVisible = false
 
+    // ── Dock 自动隐藏 ──────────────────────────────────────────────────────────
+    private var isDockVisible = true
+    private var dockAutoHideSeconds = 10          // 默认 10 秒，0 = 禁用
+    private val dockHideRunnable = Runnable { hideDockWithAnim() }
+
+    // ── 时钟更新 ──────────────────────────────────────────────────────────────
     private val clockRunnable = object : Runnable {
         override fun run() {
             updateClock()
-            clockHandler.postDelayed(this, 30_000)
+            mainHandler.postDelayed(this, 30_000)
         }
     }
+
+    // ── 天气卡片展开状态 ──────────────────────────────────────────────────────
+    private var isWeatherExpanded = false
+    private var weatherCollapsedH = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,21 +77,23 @@ class MainActivity : FragmentActivity() {
         setupTopBar()
         setupDock()
         setupAppDrawer()
+        setupWeatherCard()
         observeViewModel()
         applyUiSettings()
 
-        clockHandler.post(clockRunnable)
+        mainHandler.post(clockRunnable)
     }
 
     override fun onResume() {
         super.onResume()
         viewModel.loadAll()
         applyUiSettings()
+        resetDockHideTimer()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        clockHandler.removeCallbacks(clockRunnable)
+        mainHandler.removeCallbacksAndMessages(null)
     }
 
     // ── 读取并应用外观设置 ──────────────────────────────────────────────────────
@@ -86,11 +102,11 @@ class MainActivity : FragmentActivity() {
         val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
         val alpha = prefs.getInt("ui_alpha", 70) / 100f
         val focusColor = prefs.getString("focus_color", "#CCFFFFFF") ?: "#CCFFFFFF"
+        dockAutoHideSeconds = prefs.getInt("dock_auto_hide_secs", 10)
 
         binding.weatherCard.alpha = alpha
         binding.weatherCard.cardElevation = 0f
 
-        // 将焦点颜色同步给 Adapter（下次 bind 时生效）
         if (::dockAdapter.isInitialized)       dockAdapter.focusColorHex = focusColor
         if (::appDrawerAdapter.isInitialized)  appDrawerAdapter.focusColorHex = focusColor
     }
@@ -106,9 +122,7 @@ class MainActivity : FragmentActivity() {
         binding.btnSettings.setOnFocusChangeListener { _, hasFocus ->
             binding.tvSettingsLabel.visibility = if (hasFocus) View.VISIBLE else View.GONE
             binding.tvSettingsLabel.text = if (hasFocus) "设置" else ""
-            binding.btnSettings.setPadding(
-                if (hasFocus) 24 else 0, 0, if (hasFocus) 24 else 0, 0
-            )
+            binding.btnSettings.setPadding(if (hasFocus) 24 else 0, 0, if (hasFocus) 24 else 0, 0)
             binding.btnSettings.layoutParams.width =
                 if (hasFocus) ViewGroup.LayoutParams.WRAP_CONTENT else btnH
             binding.btnSettings.requestLayout()
@@ -121,40 +135,84 @@ class MainActivity : FragmentActivity() {
             val ssid = binding.btnWifi.tag as? String ?: ""
             binding.tvWifiLabel.visibility = if (hasFocus) View.VISIBLE else View.GONE
             binding.tvWifiLabel.text = if (hasFocus) ssid.ifBlank { "WiFi" } else ""
-            binding.btnWifi.setPadding(
-                if (hasFocus) 20 else 0, 0, if (hasFocus) 20 else 0, 0
-            )
+            binding.btnWifi.setPadding(if (hasFocus) 20 else 0, 0, if (hasFocus) 20 else 0, 0)
             binding.btnWifi.layoutParams.width =
                 if (hasFocus) ViewGroup.LayoutParams.WRAP_CONTENT else btnH
             binding.btnWifi.requestLayout()
         }
-
         updateWifiState()
     }
 
     private fun updateWifiState() {
         val wm = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
         val ssid = wm?.connectionInfo?.ssid?.replace("\"", "") ?: ""
-        val label = if (ssid.isNotBlank() && ssid != "<unknown ssid>") ssid else ""
-        binding.btnWifi.tag = label
+        binding.btnWifi.tag = if (ssid.isNotBlank() && ssid != "<unknown ssid>") ssid else ""
     }
+
+    // ── 时钟 + 农历 ────────────────────────────────────────────────────────────
 
     private fun updateClock() {
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
         val dateFormat = SimpleDateFormat("MM月dd日  EEE", Locale.CHINESE)
         val now = Date()
+        val cal = Calendar.getInstance().apply { time = now }
         binding.tvTime.text = timeFormat.format(now)
-        binding.tvDate.text = dateFormat.format(now)
+
+        val lunar = LunarCalendar.solarToLunar(
+            cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH)
+        )
+        binding.tvDate.text = "${dateFormat.format(now)}  $lunar"
+    }
+
+    // ── 天气卡片焦点展开 ───────────────────────────────────────────────────────
+
+    private fun setupWeatherCard() {
+        binding.weatherCard.isFocusable = true
+        binding.weatherCard.isFocusableInTouchMode = false
+
+        // 初始时收起扩展区
+        binding.llWeatherExpanded.visibility = View.GONE
+
+        binding.weatherCard.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus && !isWeatherExpanded) expandWeather()
+            else if (!hasFocus && isWeatherExpanded) collapseWeather()
+        }
+    }
+
+    private fun expandWeather() {
+        isWeatherExpanded = true
+        binding.llWeatherExpanded.visibility = View.VISIBLE
+        binding.llWeatherExpanded.alpha = 0f
+        binding.llWeatherExpanded.animate()
+            .alpha(1f).setDuration(250).setInterpolator(DecelerateInterpolator()).start()
+
+        // 卡片放大边框高亮
+        val gd = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 18 * resources.displayMetrics.density
+            setStroke((2 * resources.displayMetrics.density).toInt(), Color.parseColor("#88FFFFFF"))
+        }
+        binding.weatherCard.foreground = gd
+    }
+
+    private fun collapseWeather() {
+        isWeatherExpanded = false
+        binding.llWeatherExpanded.animate()
+            .alpha(0f).setDuration(180).withEndAction {
+                binding.llWeatherExpanded.visibility = View.GONE
+            }.start()
+        binding.weatherCard.foreground = null
     }
 
     // ── Dock ──────────────────────────────────────────────────────────────────
 
     private fun setupDock() {
         dockAdapter = DockAdapter(
-            onAppClick = { pkg -> viewModel.launchApp(pkg) },
+            onAppClick     = { pkg -> recordUsage(pkg); viewModel.launchApp(pkg) },
             onAppLongClick = { pkg -> viewModel.removeFromDock(pkg) },
-            onAddClick = { startActivity(Intent(this, AppPickerActivity::class.java)) },
-            onDownKey = { showAppDrawer() }
+            onAddClick     = { startActivity(Intent(this, AppPickerActivity::class.java)) },
+            // 功能6：只有最后一个按钮（+）的下键才触发打开全部应用
+            onLastItemDownKey = { showAppDrawer() }
         )
 
         val gapPx = (14 * resources.displayMetrics.density).toInt()
@@ -162,17 +220,49 @@ class MainActivity : FragmentActivity() {
             layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.HORIZONTAL, false)
             adapter = dockAdapter
             addItemDecoration(object : RecyclerView.ItemDecoration() {
-                override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
+                override fun getItemOffsets(outRect: Rect, v: View, parent: RecyclerView, s: RecyclerView.State) {
                     outRect.left = gapPx; outRect.right = gapPx
                 }
             })
         }
     }
 
+    // ── Dock 自动隐藏 ──────────────────────────────────────────────────────────
+
+    private fun resetDockHideTimer() {
+        mainHandler.removeCallbacks(dockHideRunnable)
+        if (!isDockVisible) showDockWithAnim()
+        if (dockAutoHideSeconds > 0)
+            mainHandler.postDelayed(dockHideRunnable, dockAutoHideSeconds * 1000L)
+    }
+
+    private fun showDockWithAnim() {
+        if (isDockVisible) return
+        isDockVisible = true
+        binding.llDockContainer.visibility = View.VISIBLE
+        binding.llDockContainer.translationY = binding.llDockContainer.height.toFloat()
+        binding.llDockContainer.animate()
+            .translationY(0f).alpha(1f).setDuration(260)
+            .setInterpolator(DecelerateInterpolator()).start()
+    }
+
+    private fun hideDockWithAnim() {
+        if (!isDockVisible || isAppDrawerVisible) return
+        isDockVisible = false
+        binding.llDockContainer.animate()
+            .translationY(binding.llDockContainer.height.toFloat())
+            .alpha(0f).setDuration(300)
+            .withEndAction { binding.llDockContainer.visibility = View.INVISIBLE }
+            .start()
+    }
+
     // ── App 抽屉（遥控器向下滑出）─────────────────────────────────────────────
 
     private fun setupAppDrawer() {
-        appDrawerAdapter = AppDrawerAdapter(onAppClick = { app -> viewModel.launchApp(app.packageName) })
+        appDrawerAdapter = AppDrawerAdapter(onAppClick = { app ->
+            recordUsage(app.packageName)
+            viewModel.launchApp(app.packageName)
+        })
 
         binding.rvAppDrawer.apply {
             layoutManager = GridLayoutManager(this@MainActivity, 7)
@@ -186,14 +276,15 @@ class MainActivity : FragmentActivity() {
     private fun showAppDrawer() {
         if (isAppDrawerVisible) return
         isAppDrawerVisible = true
+        mainHandler.removeCallbacks(dockHideRunnable)   // 抽屉开着时不自动隐藏
         binding.appDrawerPanel.visibility = View.VISIBLE
-        // 抽屉显示时隐藏 Dock
         binding.llDockContainer.animate().alpha(0f).setDuration(200).withEndAction {
             binding.llDockContainer.visibility = View.INVISIBLE
         }.start()
         binding.appDrawerPanel.doOnLayout { panel ->
             panel.translationY = panel.height.toFloat()
-            panel.animate().translationY(0f).setDuration(280).start()
+            panel.animate().translationY(0f).setDuration(280)
+                .setInterpolator(DecelerateInterpolator()).start()
             binding.rvAppDrawer.requestFocus()
         }
     }
@@ -206,18 +297,30 @@ class MainActivity : FragmentActivity() {
             .setDuration(240)
             .withEndAction {
                 binding.appDrawerPanel.visibility = View.GONE
-                // 恢复 Dock
                 binding.llDockContainer.visibility = View.VISIBLE
+                isDockVisible = true
+                binding.llDockContainer.translationY = 0f
                 binding.llDockContainer.animate().alpha(1f).setDuration(200).start()
                 binding.rvDock.requestFocus()
-            }
-            .start()
+                resetDockHideTimer()
+            }.start()
     }
 
-    // ── 遥控器按键拦截 ────────────────────────────────────────────────────────
+    // ── 使用频率记录 ───────────────────────────────────────────────────────────
+
+    private fun recordUsage(pkg: String) {
+        val prefs = getSharedPreferences("app_usage", Context.MODE_PRIVATE)
+        val count = prefs.getInt(pkg, 0)
+        prefs.edit().putInt(pkg, count + 1).apply()
+        // 通知 ViewModel 按频率重排 Dock
+        viewModel.sortDockByUsage(getSharedPreferences("app_usage", Context.MODE_PRIVATE))
+    }
+
+    // ── 遥控器按键拦截（任意按键重置 Dock 隐藏计时器）─────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
+            resetDockHideTimer()   // 任意按键重置计时
             when (event.keyCode) {
                 KeyEvent.KEYCODE_BACK -> {
                     if (isAppDrawerVisible) { hideAppDrawer(); return true }
@@ -239,7 +342,6 @@ class MainActivity : FragmentActivity() {
 
     private fun observeViewModel() {
         viewModel.dockItems.observe(this) { items -> dockAdapter.submitList(items) }
-
         viewModel.allApps.observe(this) { apps -> appDrawerAdapter.submitList(apps) }
 
         viewModel.weather.observe(this) { info ->
@@ -250,105 +352,97 @@ class MainActivity : FragmentActivity() {
             binding.tvWeatherHumidity.text = "湿度 ${info.humidity}%"
             binding.ivWeatherIcon.setImageResource(info.weatherDrawable())
 
-            val forecasts = info.forecast
-            if (forecasts.isNotEmpty()) {
-                binding.tvForecast1Day.text = forecasts[0].dayName
-                binding.tvForecast1Temp.text = "${forecasts[0].maxTemp}° / ${forecasts[0].minTemp}°"
-                binding.tvForecast1Icon.text = forecasts[0].weatherEmoji()
+            val fc = info.forecast
+            fun bindDay(dayView: android.widget.TextView, iconView: android.widget.TextView,
+                        tempView: android.widget.TextView, idx: Int) {
+                if (idx < fc.size) {
+                    dayView.text  = fc[idx].dayName
+                    iconView.text = fc[idx].weatherEmoji()
+                    tempView.text = "${fc[idx].maxTemp}° / ${fc[idx].minTemp}°"
+                }
             }
-            if (forecasts.size > 1) {
-                binding.tvForecast2Day.text = forecasts[1].dayName
-                binding.tvForecast2Temp.text = "${forecasts[1].maxTemp}° / ${forecasts[1].minTemp}°"
-                binding.tvForecast2Icon.text = forecasts[1].weatherEmoji()
-            }
-            if (forecasts.size > 2) {
-                binding.tvForecast3Day.text = forecasts[2].dayName
-                binding.tvForecast3Temp.text = "${forecasts[2].maxTemp}° / ${forecasts[2].minTemp}°"
-                binding.tvForecast3Icon.text = forecasts[2].weatherEmoji()
-            }
+            bindDay(binding.tvForecast1Day, binding.tvForecast1Icon, binding.tvForecast1Temp, 0)
+            bindDay(binding.tvForecast2Day, binding.tvForecast2Icon, binding.tvForecast2Temp, 1)
+            bindDay(binding.tvForecast3Day, binding.tvForecast3Icon, binding.tvForecast3Temp, 2)
+            // 扩展区（获得焦点时显示）
+            bindDay(binding.tvForecast4Day, binding.tvForecast4Icon, binding.tvForecast4Temp, 3)
+            bindDay(binding.tvForecast5Day, binding.tvForecast5Icon, binding.tvForecast5Temp, 4)
         }
 
         viewModel.backgroundPath.observe(this) { path ->
             if (path.isNullOrBlank()) return@observe
+            val transition = getWallpaperTransition()
             when {
                 path.startsWith("smb://") || path.startsWith("https://") -> {
-                    // SMB / WebDAV：IO 线程读取，检测竖屏并可能拼接
                     lifecycleScope.launch(Dispatchers.IO) {
                         val bytes = viewModel.loadImageBytes(path)
                         val finalBitmap = bytes?.let { tryMergePortrait(it, path) }
                         withContext(Dispatchers.Main) {
-                            if (finalBitmap != null) {
-                                Glide.with(this@MainActivity)
-                                    .load(finalBitmap)
-                                    .transition(DrawableTransitionOptions.withCrossFade(800))
-                                    .centerCrop()
-                                    .into(binding.ivBackground)
-                            } else if (bytes != null) {
-                                Glide.with(this@MainActivity)
-                                    .load(bytes)
-                                    .transition(DrawableTransitionOptions.withCrossFade(800))
-                                    .centerCrop()
-                                    .into(binding.ivBackground)
+                            when {
+                                finalBitmap != null -> loadBg(finalBitmap, transition)
+                                bytes != null       -> loadBg(bytes, transition)
                             }
                         }
                     }
                 }
-                else -> {
-                    // file:///android_asset/ 或 content:// → Glide 原生支持
-                    Glide.with(this)
-                        .load(path)
-                        .transition(DrawableTransitionOptions.withCrossFade(800))
-                        .centerCrop()
-                        .into(binding.ivBackground)
-                }
+                else -> loadBg(path, transition)
             }
         }
     }
 
-    /**
-     * 检测图片是否为竖屏。若是，尝试从 SMB 列表找另一张竖屏图随机拼合并排。
-     * @return 拼合后的 Bitmap，或 null（表示使用原始 bytes）
-     */
+    // ── 壁纸过渡动画 ──────────────────────────────────────────────────────────
+
+    private fun getWallpaperTransition(): String =
+        getSharedPreferences("settings", Context.MODE_PRIVATE)
+            .getString("wallpaper_transition", "fade") ?: "fade"
+
+    private fun loadBg(src: Any, transition: String) {
+        val req = Glide.with(this).let {
+            when (src) {
+                is Bitmap     -> it.load(src)
+                is ByteArray  -> it.load(src)
+                is String     -> it.load(src)
+                else          -> it.load(src)
+            }
+        }.centerCrop()
+
+        when (transition) {
+            "none"  -> req.into(binding.ivBackground)
+            "fade"  -> req.transition(DrawableTransitionOptions.withCrossFade(700)).into(binding.ivBackground)
+            "slow"  -> req.transition(DrawableTransitionOptions.withCrossFade(1800)).into(binding.ivBackground)
+            else    -> req.transition(DrawableTransitionOptions.withCrossFade(700)).into(binding.ivBackground)
+        }
+    }
+
+    // ── 竖屏图片拼合 ──────────────────────────────────────────────────────────
+
     private fun tryMergePortrait(bytes: ByteArray, currentUrl: String): Bitmap? {
         return try {
             val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-            val w = opts.outWidth
-            val h = opts.outHeight
-            if (h <= w * 1.15) return null  // 不是竖屏，不拼合
+            if (opts.outHeight <= opts.outWidth * 1.15) return null
 
-            // 是竖屏，找另一张竖屏候选
             val candidate = viewModel.getPortraitCandidate(currentUrl) ?: return null
             val bytes2 = viewModel.loadImageBytes(candidate) ?: return null
-
-            // 解码两张图，等比缩放后无缝并排
             val b1 = BitmapFactory.decodeByteArray(bytes,  0, bytes.size)  ?: return null
             val b2 = BitmapFactory.decodeByteArray(bytes2, 0, bytes2.size) ?: return null
 
             val targetH = maxOf(b1.height, b2.height).coerceAtMost(1080)
-            val w1 = (b1.width  * (targetH.toFloat() / b1.height)).toInt()
-            val w2 = (b2.width  * (targetH.toFloat() / b2.height)).toInt()
-            // 拉伸两侧各补 blendW 像素，使总宽刚好覆盖目标宽度（TV 1920 / 2 = 960）
+            val w1 = (b1.width * (targetH.toFloat() / b1.height)).toInt()
+            val w2 = (b2.width * (targetH.toFloat() / b2.height)).toInt()
             val targetW = 1920
-            // 按比例分配宽度，使两张图均匀铺满 1920
             val ratio = targetW.toFloat() / (w1 + w2)
             val fw1 = (w1 * ratio).toInt()
             val fw2 = targetW - fw1
-
             val s1 = Bitmap.createScaledBitmap(b1, fw1, targetH, true)
             val s2 = Bitmap.createScaledBitmap(b2, fw2, targetH, true)
-
             val result = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(result)
-
-            // 两张图直接 0 间距并排
-            canvas.drawBitmap(s1, 0f, 0f, null)
-            canvas.drawBitmap(s2, fw1.toFloat(), 0f, null)
-
+            Canvas(result).apply {
+                drawBitmap(s1, 0f, 0f, null)
+                drawBitmap(s2, fw1.toFloat(), 0f, null)
+            }
             b1.recycle(); b2.recycle(); s1.recycle(); s2.recycle()
             result
-        } catch (e: Exception) {
-            null
-        }
+        } catch (_: Exception) { null }
     }
 }
