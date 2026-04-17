@@ -51,7 +51,7 @@ class MainActivity : FragmentActivity() {
     private var isAppDrawerVisible = false
 
     // ── Dock 自动隐藏 ──────────────────────────────────────────────────────────
-    private var isDockVisible = true
+    private var isDockVisible = false
     private var dockAutoHideSeconds = 10          // 默认 10 秒，0 = 禁用
     private val dockHideRunnable = Runnable { hideDockWithAnim() }
 
@@ -82,13 +82,17 @@ class MainActivity : FragmentActivity() {
         applyUiSettings()
 
         mainHandler.post(clockRunnable)
+
+        // 启动默认无焦点：根布局抢占焦点，子 View 均无焦点
+        binding.root.requestFocus()
     }
 
     override fun onResume() {
         super.onResume()
         viewModel.loadAll()
         applyUiSettings()
-        resetDockHideTimer()
+        // 回到桌面时保持纯背景，不自动弹出 dock
+        binding.root.requestFocus()
     }
 
     override fun onDestroy() {
@@ -231,6 +235,8 @@ class MainActivity : FragmentActivity() {
             // 功能6：只有最后一个按钮（+）的下键才触发打开全部应用
             onLastItemDownKey = { showAppDrawer() }
         )
+        // 初始化时缓存 assets/icons 列表，避免每次 bind 都做文件系统 IO
+        dockAdapter.cacheAssetIcons(this)
 
         val gapPx = (14 * resources.displayMetrics.density).toInt()
         binding.rvDock.apply {

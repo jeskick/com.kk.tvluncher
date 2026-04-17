@@ -5,7 +5,10 @@
     android:layout_height="match_parent"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:background="@color/bg_dark">
+    android:background="@color/bg_dark"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:descendantFocusability="beforeDescendants">
 
     <!-- 背景图片（全屏，最底层） -->
     <ImageView
@@ -470,7 +473,8 @@
                 android:paddingEnd="@dimen/screen_padding"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:background="@android:color/transparent">
+                android:background="@android:color/transparent"
+                android:visibility="invisible">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rvDock"
