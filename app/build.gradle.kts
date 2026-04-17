@@ -13,8 +13,8 @@ android {
         applicationId = "com.kk.tvlauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         // 从 local.properties 注入默认配置（不提交到 git）
         val localProps = Properties()
