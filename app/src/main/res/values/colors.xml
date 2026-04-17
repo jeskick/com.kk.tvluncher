@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 背景 -->
+    <color name="bg_dark">#FF0A0A18</color>
+    <color name="card_bg">#661A1A38</color>
+    <color name="bg_card">#661A1A38</color>
+    <color name="bg_card_focused">#AA252550</color>
+    <color name="drawer_bg">#AA0A0A1E</color>
+    <color name="bg_overlay">#CC060610</color>
+    <color name="overlay_dim">#55000000</color>
+    <color name="dock_bg">#00000000</color>
+
+    <!-- 文字 -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#99B0BEC5</color>
+    <color name="text_hint">#55808898</color>
+    <color name="text_label">#BBCFD8DD</color>
+
+    <!-- 强调色：玫瑰红 -->
+    <color name="accent">#FFE94560</color>
+    <color name="accent_dim">#55E94560</color>
+
+    <!-- 分割线 / 边框 -->
+    <color name="divider">#22FFFFFF</color>
+    <color name="stroke_default">#28FFFFFF</color>
+    <color name="stroke_focus">#CCFFFFFF</color>
+
+    <!-- 输入框 -->
+    <color name="input_bg">#14FFFFFF</color>
+
+    <!-- 焦点高亮（保留兼容） -->
+    <color name="focus_stroke">#CCFFFFFF</color>
+</resources>

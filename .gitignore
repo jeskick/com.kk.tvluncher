@@ -1,0 +1,25 @@
+# Build outputs
+build/
+.gradle/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Signing — 不提交密钥和密码
+*.jks
+*.keystore
+signing.properties
+
+# APK (releases/ 目录下的 APK 除外)
+app/build/outputs/
+!/releases/*.apk
+
+# Gradle caches
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+
+# Android Studio
+captures/
+.externalNativeBuild/
+.cxx/

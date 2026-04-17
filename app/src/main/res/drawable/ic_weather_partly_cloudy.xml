@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+
+  <!-- 小太阳 -->
+  <path android:pathData="M70,30 m-20,0 a20,20,0,1,0,40,0 a20,20,0,1,0,-40,0">
+    <aapt:attr name="android:fillColor">
+      <gradient android:type="radial"
+          android:centerX="62" android:centerY="22" android:gradientRadius="24">
+        <item android:offset="0"   android:color="#FFF9C4"/>
+        <item android:offset="0.5" android:color="#FFD54F"/>
+        <item android:offset="1"   android:color="#FF8F00"/>
+      </gradient>
+    </aapt:attr>
+  </path>
+  <path android:fillAlpha="0.4" android:fillColor="#FFFFFF"
+        android:pathData="M64,23 m-6,0 a6,5,0,1,0,12,0 a6,5,0,1,0,-12,0"/>
+
+  <!-- 云主体 -->
+  <path android:pathData="M10,72 Q10,58 22,56 Q18,42 32,42 Q34,28 50,28 Q64,22 70,36 Q82,32 85,46 Q96,46 96,60 Q96,74 82,74 Z">
+    <aapt:attr name="android:fillColor">
+      <gradient android:type="linear"
+          android:startX="10" android:startY="28" android:endX="96" android:endY="74">
+        <item android:offset="0"   android:color="#E8EAF6"/>
+        <item android:offset="0.5" android:color="#C5CAE9"/>
+        <item android:offset="1"   android:color="#9FA8DA"/>
+      </gradient>
+    </aapt:attr>
+  </path>
+  <path android:fillAlpha="0.5" android:fillColor="#FFFFFF"
+        android:pathData="M22,46 Q38,38 54,44"/>
+</vector>

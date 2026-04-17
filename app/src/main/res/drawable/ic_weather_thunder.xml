@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+
+  <path android:pathData="M6,58 Q6,46 16,44 Q12,30 26,30 Q28,16 44,16 Q58,10 64,24 Q78,20 80,34 Q90,34 90,48 Q90,60 78,62 Z">
+    <aapt:attr name="android:fillColor">
+      <gradient android:type="linear"
+          android:startX="6" android:startY="16" android:endX="90" android:endY="62">
+        <item android:offset="0"   android:color="#78909C"/>
+        <item android:offset="0.5" android:color="#455A64"/>
+        <item android:offset="1"   android:color="#263238"/>
+      </gradient>
+    </aapt:attr>
+  </path>
+
+  <!-- 闪电（渐变填充） -->
+  <path android:pathData="M56,62 L44,80 L53,80 L46,97 L67,76 L57,76 L66,62 Z">
+    <aapt:attr name="android:fillColor">
+      <gradient android:type="linear"
+          android:startX="44" android:startY="62" android:endX="67" android:endY="97">
+        <item android:offset="0" android:color="#FFF176"/>
+        <item android:offset="1" android:color="#F57F17"/>
+      </gradient>
+    </aapt:attr>
+  </path>
+  <!-- 闪电高光 -->
+  <path android:fillAlpha="0.6" android:fillColor="#FFFFFF"
+        android:pathData="M60,64 L55,74 L59,74 L55,82 L63,71 L58,71 L63,64 Z"/>
+</vector>

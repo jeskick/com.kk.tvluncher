@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 背景遮罩：顶部深色渐变 + 底部深色渐变，中间透明，增强可读性 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="270"
+                android:startColor="#CC0D0D1A"
+                android:centerColor="#220D0D1A"
+                android:endColor="#CC0D0D1A"
+                android:centerX="0.5"
+                android:centerY="0.5" />
+        </shape>
+    </item>
+</layer-list>

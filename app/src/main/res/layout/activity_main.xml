@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:background="@color/bg_dark">
+
+    <!-- 背景图片（全屏，最底层） -->
+    <ImageView
+        android:id="@+id/ivBackground"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+
+    <!-- 渐变遮罩，增强文字可读性 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_dim_overlay" />
+
+    <!-- 主内容层（垂直排布，占满全屏） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <!-- ① 顶部工具栏 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/top_bar_height"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="@dimen/screen_padding"
+            android:paddingEnd="@dimen/screen_padding"
+            android:background="@drawable/bg_top_bar">
+
+            <!-- 设置按钮 -->
+            <LinearLayout
+                android:id="@+id/btnSettings"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@drawable/bg_top_btn"
+                android:focusable="true"
+                android:clickable="true"
+                android:padding="0dp">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_settings_white"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/tvSettingsLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <Space android:layout_width="8dp" android:layout_height="0dp" />
+
+            <!-- WiFi 按钮 -->
+            <LinearLayout
+                android:id="@+id/btnWifi"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@drawable/bg_top_btn"
+                android:focusable="true"
+                android:clickable="true"
+                android:padding="0dp">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:src="@drawable/ic_wifi_white"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/tvWifiLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:paddingStart="6dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- 弹性空间 -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <!-- 日期 -->
+            <TextView
+                android:id="@+id/tvDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/text_date" />
+
+            <Space android:layout_width="16dp" android:layout_height="0dp" />
+
+            <!-- 时间 -->
+            <TextView
+                android:id="@+id/tvTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/text_time"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <!-- ② 主内容区（天气卡片 + 背景） -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <!-- 天气卡片（左上角） -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/weatherCard"
+                android:layout_width="@dimen/weather_card_width"
+                android:layout_height="wrap_content"
+                android:layout_margin="@dimen/screen_padding"
+                app:cardCornerRadius="18dp"
+                app:cardBackgroundColor="@color/card_bg"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/stroke_default"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <!-- 城市名 -->
+                    <TextView
+                        android:id="@+id/tvWeatherCity"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <!-- 温度 + 文字 + 卡通天气图 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="4dp">
+
+                        <TextView
+                            android:id="@+id/tvWeatherTemp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="--°"
+                            android:textColor="@color/text_primary"
+                            android:textSize="64sp"
+                            android:textStyle="bold"
+                            android:lineSpacingMultiplier="0.8"
+                            android:includeFontPadding="false" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:layout_marginStart="12dp">
+
+                            <TextView
+                                android:id="@+id/tvWeatherDesc"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="--"
+                                android:textColor="@color/text_primary"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/tvWeatherHumidity"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="湿度 --%"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+
+                        <!-- 3D 天气图标 -->
+                        <ImageView
+                            android:id="@+id/ivWeatherIcon"
+                            android:layout_width="96dp"
+                            android:layout_height="96dp"
+                            android:layout_marginStart="4dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_weather_sunny"
+                            android:contentDescription="@null" />
+                    </LinearLayout>
+
+                    <!-- 分割线 -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="12dp"
+                        android:background="@color/divider" />
+
+                    <!-- 3天预报 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <!-- 第1天 -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView android:id="@+id/tvForecast1Day"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                            <TextView android:id="@+id/tvForecast1Icon"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--" android:textSize="20sp" android:layout_marginTop="2dp" />
+                            <TextView android:id="@+id/tvForecast1Temp"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--/--" android:textColor="@color/text_primary" android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- 第2天 -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView android:id="@+id/tvForecast2Day"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                            <TextView android:id="@+id/tvForecast2Icon"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--" android:textSize="20sp" android:layout_marginTop="2dp" />
+                            <TextView android:id="@+id/tvForecast2Temp"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--/--" android:textColor="@color/text_primary" android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- 第3天 -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="center">
+                            <TextView android:id="@+id/tvForecast3Day"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--" android:textColor="@color/text_secondary" android:textSize="11sp" />
+                            <TextView android:id="@+id/tvForecast3Icon"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--" android:textSize="20sp" android:layout_marginTop="2dp" />
+                            <TextView android:id="@+id/tvForecast3Temp"
+                                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                                android:text="--/--" android:textColor="@color/text_primary" android:textSize="11sp" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+        </FrameLayout>
+
+        <!-- ③ 底部区域（App 抽屉 + Dock） -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <!-- App 抽屉面板（遥控器向下时滑出） -->
+            <FrameLayout
+                android:id="@+id/appDrawerPanel"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/drawer_height"
+                android:background="@color/drawer_bg"
+                android:visibility="gone">
+
+                <!-- 标题栏 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="所有应用"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnCloseDrawer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:gravity="center"
+                        android:text="  关闭  "
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_top_btn"
+                        android:focusable="true"
+                        android:clickable="true" />
+                </LinearLayout>
+
+                <!-- 应用网格 -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvAppDrawer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:paddingTop="56dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="8dp"
+                    android:clipToPadding="false" />
+
+            </FrameLayout>
+
+            <!-- Dock 栏：纯透明 -->
+            <LinearLayout
+                android:id="@+id/llDockContainer"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/dock_height"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="@dimen/screen_padding"
+                android:paddingEnd="@dimen/screen_padding"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:background="@android:color/transparent">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvDock"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scrollbars="none"
+                    android:clipChildren="false"
+                    android:clipToPadding="false" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

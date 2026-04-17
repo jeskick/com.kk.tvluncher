@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 屏幕边距 -->
+    <dimen name="screen_padding">32dp</dimen>
+    <!-- 顶部工具栏 -->
+    <dimen name="top_bar_height">56dp</dimen>
+    <dimen name="top_btn_height">40dp</dimen>
+    <!-- Dock -->
+    <dimen name="dock_height">100dp</dimen>
+    <dimen name="dock_item_width">192dp</dimen>
+    <dimen name="dock_icon_size">52dp</dimen>
+    <!-- App 抽屉 -->
+    <dimen name="drawer_height">260dp</dimen>
+    <!-- 天气卡片 -->
+    <dimen name="weather_card_width">280dp</dimen>
+    <!-- 字体 -->
+    <dimen name="text_btn">13sp</dimen>
+    <dimen name="text_time">26sp</dimen>
+    <dimen name="text_date">14sp</dimen>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TVLauncher" parent="@style/Theme.Leanback">
+        <item name="android:windowBackground">@color/bg_dark</item>
+        <item name="android:colorPrimary">@color/accent</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
+    <!-- App Picker 的半透明弹出层（透视背景 + 半暗遮罩） -->
+    <style name="Theme.TVLauncher.Overlay" parent="@style/Theme.TVLauncher">
+        <item name="android:windowBackground">@color/overlay_dim</item>
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
+</resources>

@@ -1,0 +1,555 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_dark">
+
+    <!-- ── 顶部标题栏 ── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="32dp"
+        android:paddingEnd="24dp"
+        android:background="@drawable/bg_top_bar">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="设置"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.05" />
+
+        <TextView
+            android:id="@+id/btnCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:text="取消"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:background="@drawable/bg_top_btn"
+            android:focusable="true"
+            android:clickable="true"
+            android:layout_marginEnd="10dp" />
+
+        <TextView
+            android:id="@+id/btnSave"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:gravity="center"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:text="保存"
+            android:textColor="#FFFFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_btn_accent"
+            android:focusable="true"
+            android:clickable="true" />
+    </LinearLayout>
+
+    <!-- ── 内容区 ── -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="40dp"
+            android:paddingEnd="40dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="32dp">
+
+            <!-- ①────────────────── 桌面背景 ──────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="桌面背景"
+                android:textColor="@color/text_label"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_section_card"
+                android:padding="20dp"
+                android:layout_marginBottom="20dp">
+
+                <!-- 当前路径 -->
+                <TextView
+                    android:id="@+id/tvBgPath"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="内置壁纸（随机）"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_input"
+                    android:padding="12dp"
+                    android:ellipsize="middle"
+                    android:singleLine="true"
+                    android:layout_marginBottom="14dp" />
+
+                <!-- 操作按钮 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/btnPickBg"
+                        android:layout_width="0dp"
+                        android:layout_height="42dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="本地图片"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:background="@drawable/bg_btn_accent"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp" />
+
+                    <TextView
+                        android:id="@+id/btnClearBg"
+                        android:layout_width="0dp"
+                        android:layout_height="42dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="恢复默认"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:background="@drawable/bg_top_btn"
+                        android:focusable="true"
+                        android:clickable="true" />
+                </LinearLayout>
+
+                <!-- 内置壁纸选择 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="内置壁纸"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/tvBuiltinWallpaper"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:text="随机切换"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_input"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:singleLine="true"
+                        android:focusable="false" />
+
+                    <Button
+                        android:id="@+id/btnPickBuiltin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="46dp"
+                        android:layout_marginStart="8dp"
+                        android:text="选择"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:background="@drawable/bg_top_btn"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- ②────────────────── 外观 ─────────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="外观"
+                android:textColor="@color/text_label"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_section_card"
+                android:padding="20dp"
+                android:layout_marginBottom="20dp">
+
+                <!-- 全局透明度 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="界面透明度"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvAlphaValue"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:text="70%"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:gravity="center" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/seekbarAlpha"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="100"
+                    android:progress="70"
+                    android:layout_marginBottom="20dp"
+                    android:progressTint="@color/accent"
+                    android:thumbTint="@color/text_primary" />
+
+                <!-- 焦点边框颜色 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="焦点边框颜色"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="10dp" />
+
+                <LinearLayout
+                    android:id="@+id/llColorPicker"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="start">
+
+                    <!-- 颜色色块由代码动态添加 -->
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- ③────────────────── 天气 ─────────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="天气"
+                android:textColor="@color/text_label"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_section_card"
+                android:padding="20dp"
+                android:layout_marginBottom="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="城市"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp" />
+
+                <EditText
+                    android:id="@+id/etWeatherCity"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginBottom="16dp"
+                    android:hint="东莞"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:background="@drawable/bg_input"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textSize="14sp"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="和风天气 API Key"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp" />
+
+                <EditText
+                    android:id="@+id/etWeatherApiKey"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:hint="粘贴你的 API Key"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:background="@drawable/bg_input"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textSize="13sp"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <!-- ④────────────────── 壁纸幻灯片 ─────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="壁纸幻灯片"
+                android:textColor="@color/text_label"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_section_card"
+                android:padding="20dp"
+                android:layout_marginBottom="20dp">
+
+                <!-- 当前路径 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SMB 路径"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvSmbPath"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:gravity="center_vertical"
+                    android:text="未设置"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_input"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:ellipsize="middle"
+                    android:singleLine="true"
+                    android:layout_marginBottom="14dp" />
+
+                <!-- 用户名 + 密码 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="14dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="用户名"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="6dp" />
+
+                        <EditText
+                            android:id="@+id/etSmbUser"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:hint="留空为访客"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_hint"
+                            android:background="@drawable/bg_input"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:textSize="13sp"
+                            android:singleLine="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="密码"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="6dp" />
+
+                        <EditText
+                            android:id="@+id/etSmbPass"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:hint="留空无密码"
+                            android:textColor="@color/text_primary"
+                            android:textColorHint="@color/text_hint"
+                            android:background="@drawable/bg_input"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:textSize="13sp"
+                            android:singleLine="true"
+                            android:inputType="textPassword" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 幻灯片间隔 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="14dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="切换间隔（秒）"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/etSlideshowInterval"
+                        android:layout_width="100dp"
+                        android:layout_height="46dp"
+                        android:hint="10"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint"
+                        android:background="@drawable/bg_input"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:textSize="14sp"
+                        android:singleLine="true"
+                        android:inputType="number"
+                        android:gravity="center" />
+                </LinearLayout>
+
+                <!-- 操作按钮 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnPickSmb"
+                        android:layout_width="0dp"
+                        android:layout_height="42dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="扫描 / 配置"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:background="@drawable/bg_btn_accent"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:layout_marginEnd="10dp" />
+
+                    <TextView
+                        android:id="@+id/btnClearSmb"
+                        android:layout_width="0dp"
+                        android:layout_height="42dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="清除路径"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:background="@drawable/bg_top_btn"
+                        android:focusable="true"
+                        android:clickable="true" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ⑤────────────────── 系统 ─────────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="系统"
+                android:textColor="@color/text_label"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@drawable/bg_section_card"
+                android:padding="20dp">
+
+                <TextView
+                    android:id="@+id/btnSystemSettings"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="系统设置"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:background="@drawable/bg_top_btn"
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:layout_marginEnd="10dp" />
+
+                <TextView
+                    android:id="@+id/btnSystemWifi"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="WiFi 设置"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:background="@drawable/bg_top_btn"
+                    android:focusable="true"
+                    android:clickable="true" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
