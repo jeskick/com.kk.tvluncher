@@ -169,13 +169,27 @@ class MainActivity : FragmentActivity() {
     private fun setupWeatherCard() {
         binding.weatherCard.isFocusable = true
         binding.weatherCard.isFocusableInTouchMode = false
+        binding.weatherCard.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
 
-        // 初始时收起扩展区
         binding.llWeatherExpanded.visibility = View.GONE
 
-        binding.weatherCard.setOnFocusChangeListener { _, hasFocus ->
+        binding.weatherCard.setOnFocusChangeListener { v, hasFocus ->
+            // 高亮边框
+            val dp = v.resources.displayMetrics.density
+            val gd = if (hasFocus) GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18 * dp
+                setStroke((2 * dp).toInt(), Color.parseColor("#AAFFFFFF"))
+            } else null
+            binding.weatherCard.foreground = gd
+
             if (hasFocus && !isWeatherExpanded) expandWeather()
             else if (!hasFocus && isWeatherExpanded) collapseWeather()
+        }
+
+        // 遥控器 OK 键也可切换展开
+        binding.weatherCard.setOnClickListener {
+            if (isWeatherExpanded) collapseWeather() else expandWeather()
         }
     }
 
@@ -185,14 +199,6 @@ class MainActivity : FragmentActivity() {
         binding.llWeatherExpanded.alpha = 0f
         binding.llWeatherExpanded.animate()
             .alpha(1f).setDuration(250).setInterpolator(DecelerateInterpolator()).start()
-
-        // 卡片放大边框高亮
-        val gd = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 18 * resources.displayMetrics.density
-            setStroke((2 * resources.displayMetrics.density).toInt(), Color.parseColor("#88FFFFFF"))
-        }
-        binding.weatherCard.foreground = gd
     }
 
     private fun collapseWeather() {
@@ -201,7 +207,6 @@ class MainActivity : FragmentActivity() {
             .alpha(0f).setDuration(180).withEndAction {
                 binding.llWeatherExpanded.visibility = View.GONE
             }.start()
-        binding.weatherCard.foreground = null
     }
 
     // ── Dock ──────────────────────────────────────────────────────────────────

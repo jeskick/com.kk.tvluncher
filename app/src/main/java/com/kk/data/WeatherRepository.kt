@@ -12,7 +12,7 @@ import java.net.URL
 class WeatherRepository {
 
     companion object {
-        const val API_HOST = "devapi.qweather.com"
+        const val API_HOST = "ph5pwe9rwp.re.qweatherapi.com"
         // 优先读 local.properties（smb.key），其次设置界面输入
         val DEFAULT_API_KEY get() = BuildConfig.DEFAULT_WEATHER_KEY.ifBlank { "" }
 
