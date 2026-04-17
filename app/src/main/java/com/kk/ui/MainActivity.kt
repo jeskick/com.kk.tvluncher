@@ -194,19 +194,31 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun expandWeather() {
+        if (isWeatherExpanded) return
         isWeatherExpanded = true
-        binding.llWeatherExpanded.visibility = View.VISIBLE
-        binding.llWeatherExpanded.alpha = 0f
-        binding.llWeatherExpanded.animate()
-            .alpha(1f).setDuration(250).setInterpolator(DecelerateInterpolator()).start()
+        val panel = binding.llWeatherExpanded
+        panel.translationX = 60f
+        panel.alpha = 0f
+        panel.visibility = View.VISIBLE
+        panel.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(280)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     private fun collapseWeather() {
+        if (!isWeatherExpanded) return
         isWeatherExpanded = false
-        binding.llWeatherExpanded.animate()
-            .alpha(0f).setDuration(180).withEndAction {
-                binding.llWeatherExpanded.visibility = View.GONE
-            }.start()
+        val panel = binding.llWeatherExpanded
+        panel.animate()
+            .translationX(60f)
+            .alpha(0f)
+            .setDuration(200)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction { panel.visibility = View.GONE }
+            .start()
     }
 
     // ── Dock ──────────────────────────────────────────────────────────────────
@@ -358,20 +370,40 @@ class MainActivity : FragmentActivity() {
             binding.ivWeatherIcon.setImageResource(info.weatherDrawable())
 
             val fc = info.forecast
-            fun bindDay(dayView: android.widget.TextView, iconView: android.widget.TextView,
-                        tempView: android.widget.TextView, idx: Int) {
+
+            // 左侧3天迷你预报
+            fun bindMini(dayV: android.widget.TextView, iconV: android.widget.TextView,
+                         tempV: android.widget.TextView, idx: Int) {
                 if (idx < fc.size) {
-                    dayView.text  = fc[idx].dayName
-                    iconView.text = fc[idx].weatherEmoji()
-                    tempView.text = "${fc[idx].maxTemp}° / ${fc[idx].minTemp}°"
+                    dayV.text  = fc[idx].dayName
+                    iconV.text = fc[idx].weatherEmoji()
+                    tempV.text = "${fc[idx].maxTemp}°/${fc[idx].minTemp}°"
                 }
             }
-            bindDay(binding.tvForecast1Day, binding.tvForecast1Icon, binding.tvForecast1Temp, 0)
-            bindDay(binding.tvForecast2Day, binding.tvForecast2Icon, binding.tvForecast2Temp, 1)
-            bindDay(binding.tvForecast3Day, binding.tvForecast3Icon, binding.tvForecast3Temp, 2)
-            // 扩展区（获得焦点时显示）
-            bindDay(binding.tvForecast4Day, binding.tvForecast4Icon, binding.tvForecast4Temp, 3)
-            bindDay(binding.tvForecast5Day, binding.tvForecast5Icon, binding.tvForecast5Temp, 4)
+            bindMini(binding.tvForecast1Day, binding.tvForecast1Icon, binding.tvForecast1Temp, 0)
+            bindMini(binding.tvForecast2Day, binding.tvForecast2Icon, binding.tvForecast2Temp, 1)
+            bindMini(binding.tvForecast3Day, binding.tvForecast3Icon, binding.tvForecast3Temp, 2)
+
+            // 右侧大图标面板（5天，获焦展开）
+            fun bindBig(dayV: android.widget.TextView, iconV: android.widget.TextView,
+                        maxV: android.widget.TextView, minV: android.widget.TextView, idx: Int) {
+                if (idx < fc.size) {
+                    dayV.text  = fc[idx].dayName
+                    iconV.text = fc[idx].weatherEmoji()
+                    maxV.text  = "${fc[idx].maxTemp}°"
+                    minV.text  = "${fc[idx].minTemp}°"
+                }
+            }
+            bindBig(binding.tvForecast1DayR,  binding.tvForecast1IconR,
+                    binding.tvForecast1TempR,  binding.tvForecast1TempMinR, 0)
+            bindBig(binding.tvForecast2DayR,  binding.tvForecast2IconR,
+                    binding.tvForecast2TempR,  binding.tvForecast2TempMinR, 1)
+            bindBig(binding.tvForecast3DayR,  binding.tvForecast3IconR,
+                    binding.tvForecast3TempR,  binding.tvForecast3TempMinR, 2)
+            bindBig(binding.tvForecast4Day,   binding.tvForecast4Icon,
+                    binding.tvForecast4Temp,   binding.tvForecast4TempMin,  3)
+            bindBig(binding.tvForecast5Day,   binding.tvForecast5Icon,
+                    binding.tvForecast5Temp,   binding.tvForecast5TempMin,  4)
         }
 
         viewModel.backgroundPath.observe(this) { path ->
