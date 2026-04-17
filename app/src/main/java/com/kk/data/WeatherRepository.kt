@@ -95,22 +95,25 @@ class WeatherRepository {
         return json.getJSONArray("location").getJSONObject(0).getString("id")
     }
 
-    /** 简单 GET 请求，返回 JSONObject（兼容非 2xx 响应） */
+    /** 简单 GET 请求，返回 JSONObject（自动解 gzip，兼容非 2xx 响应） */
     private fun get(url: String): JSONObject {
         val conn = URL(url).openConnection() as java.net.HttpURLConnection
         conn.connectTimeout = 10000
         conn.readTimeout = 10000
         conn.requestMethod = "GET"
         conn.setRequestProperty("User-Agent", "KKLauncher/1.0")
+        conn.setRequestProperty("Accept-Encoding", "gzip")
         val code = conn.responseCode
-        val body = if (code in 200..299) {
-            conn.inputStream.bufferedReader().readText()
+        val rawStream = if (code in 200..299) conn.inputStream
+                        else conn.errorStream ?: return JSONObject()
+        val encoding = conn.contentEncoding ?: ""
+        val body = if (encoding.equals("gzip", ignoreCase = true)) {
+            java.util.zip.GZIPInputStream(rawStream).bufferedReader(Charsets.UTF_8).readText()
         } else {
-            val err = conn.errorStream?.bufferedReader()?.readText() ?: "{}"
-            err
+            rawStream.bufferedReader(Charsets.UTF_8).readText()
         }
         conn.disconnect()
-        return JSONObject(body)
+        return runCatching { JSONObject(body) }.getOrDefault(JSONObject())
     }
 
     /**
