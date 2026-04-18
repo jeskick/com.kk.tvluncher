@@ -133,7 +133,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 从 SMB/WebDAV/HTTP 拉取图片列表并启动幻灯片，失败则回退到内置 */
     private fun loadSmbSlideshow(smbDir: String?, smbUser: String, smbPass: String, intervalSec: Long) {
-        viewModelScope.launch {
+        // 关键修复：整个加载+轮播链路必须作为一个可取消的 Job 管理，
+        // 否则 loadBackground 被重复调用时，旧链路仍在后台运行，
+        // 导致多个 startSlideshow 并发触发，出现图片刚显示就被切走的现象。
+        slideshowJob = viewModelScope.launch {
             val list = withContext(Dispatchers.IO) {
                 when {
                     smbDir.isNullOrBlank() -> emptyList()
@@ -147,30 +150,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
-            if (list.isEmpty()) { startBuiltinSlideshow(intervalSec); return@launch }
+            if (!isActive) return@launch
+            if (list.isEmpty()) {
+                // 列表空退回内置幻灯片（直接在同一个协程里 delay 轮播，保证 cancel 时一起停）
+                runBuiltinSlideshowLoop(intervalSec)
+                return@launch
+            }
             smbImageList = list.shuffled()
             _backgroundPath.value = smbImageList.first()
-            startSlideshow(smbUser, smbPass, intervalSec)
+            runSlideshowLoop(intervalSec)
         }
     }
 
     /** 使用内置壁纸启动幻灯片 */
     private fun startBuiltinSlideshow(intervalSec: Long) {
-        val list = getBuiltinWallpaperList().shuffled()
-        smbImageList = list
-        _backgroundPath.value = list.first()
-        if (list.size > 1) startSlideshow("", "", intervalSec)
+        slideshowJob = viewModelScope.launch {
+            runBuiltinSlideshowLoop(intervalSec)
+        }
     }
 
-    /** 定时随机切换 SMB 图片 */
-    private fun startSlideshow(user: String, pass: String, intervalSec: Long) {
-        slideshowJob = viewModelScope.launch {
-            while (isActive) {
-                delay(intervalSec * 1000L)
-                if (smbImageList.isEmpty()) break
-                val next = smbImageList.random()
-                _backgroundPath.value = next
+    /** 内置壁纸轮播循环（在当前协程里 delay，保证可取消） */
+    private suspend fun runBuiltinSlideshowLoop(intervalSec: Long) {
+        val list = getBuiltinWallpaperList().shuffled()
+        smbImageList = list
+        if (list.isEmpty()) return
+        _backgroundPath.value = list.first()
+        if (list.size <= 1) return
+        runSlideshowLoop(intervalSec)
+    }
+
+    /** 定时随机切换图片（复用当前协程，而不是新开 Job） */
+    private suspend fun runSlideshowLoop(intervalSec: Long) {
+        var last = _backgroundPath.value
+        while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+            delay(intervalSec * 1000L)
+            if (smbImageList.isEmpty()) break
+            // 避免连续选到同一张
+            var next = smbImageList.random()
+            if (smbImageList.size > 1) {
+                var tries = 0
+                while (next == last && tries < 5) {
+                    next = smbImageList.random(); tries++
+                }
             }
+            last = next
+            _backgroundPath.value = next
         }
     }
 

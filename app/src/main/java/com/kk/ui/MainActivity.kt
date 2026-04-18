@@ -266,7 +266,16 @@ class MainActivity : FragmentActivity() {
         binding.llDockContainer.translationY = binding.llDockContainer.height.toFloat()
         binding.llDockContainer.animate()
             .translationY(0f).alpha(1f).setDuration(260)
-            .setInterpolator(DecelerateInterpolator()).start()
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                // Dock 滑入后自动把焦点放到第一个 App，避免系统把焦点
+                // 错误地放到屏幕外的最右侧项上，导致需要按右键才能看到高亮
+                binding.rvDock.post {
+                    val first = binding.rvDock.layoutManager?.findViewByPosition(0)
+                    first?.requestFocus()
+                }
+            }
+            .start()
     }
 
     private fun hideDockWithAnim() {
@@ -343,7 +352,15 @@ class MainActivity : FragmentActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
-            resetDockHideTimer()   // 任意按键重置计时
+            // Dock 不可见时的"唤出"：直接显示 Dock 并吃掉这个按键，
+            // 避免该按键被系统继续用于焦点搜索（否则焦点会被冲到屏幕边缘外）。
+            val wakingUpDock = !isDockVisible && !isAppDrawerVisible &&
+                               event.keyCode != KeyEvent.KEYCODE_BACK
+            if (wakingUpDock) {
+                resetDockHideTimer()
+                return true
+            }
+            resetDockHideTimer()
             when (event.keyCode) {
                 KeyEvent.KEYCODE_BACK -> {
                     if (isAppDrawerVisible) { hideAppDrawer(); return true }

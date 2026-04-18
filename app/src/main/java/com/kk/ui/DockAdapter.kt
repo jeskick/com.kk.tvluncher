@@ -139,8 +139,20 @@ class DockAdapter(
                     .setDuration(160)
                     .start()
             }
-            // 普通 App 项：下键不触发全部应用
-            b.root.setOnKeyListener { _, _, _ -> false }
+            // 普通 App 项：下键不触发全部应用；第一个项的左键循环到最后一项
+            b.root.setOnKeyListener { _, keyCode, event ->
+                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when {
+                    keyCode == KeyEvent.KEYCODE_DPAD_LEFT && bindingAdapterPosition == 0 -> {
+                        focusPosition(itemCount - 1); true
+                    }
+                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT &&
+                        bindingAdapterPosition == itemCount - 1 -> {
+                        focusPosition(0); true
+                    }
+                    else -> false
+                }
+            }
         }
     }
 
@@ -161,13 +173,47 @@ class DockAdapter(
                     .setDuration(160)
                     .start()
             }
-            // AddButton 是最后一项，下键打开全部应用
+            // AddButton 是最后一项：下键打开全部应用；右键循环到第一项
             b.root.setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    onLastItemDownKey(); true
-                } else false
+                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> { onLastItemDownKey(); true }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> { focusPosition(0); true }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        // 如果就只有 Add 按钮（Dock 空），左键也循环不出效果
+                        if (itemCount <= 1) true else false
+                    }
+                    else -> false
+                }
             }
         }
+    }
+
+    /** 让指定位置的 item 获得焦点（必要时先滚动到可见范围） */
+    private fun focusPosition(pos: Int) {
+        if (pos < 0 || pos >= itemCount) return
+        attachedRecyclerView?.let { rv ->
+            val lm = rv.layoutManager ?: return
+            val view = lm.findViewByPosition(pos)
+            if (view != null) {
+                view.requestFocus()
+            } else {
+                rv.scrollToPosition(pos)
+                rv.post { rv.layoutManager?.findViewByPosition(pos)?.requestFocus() }
+            }
+        }
+    }
+
+    private var attachedRecyclerView: RecyclerView? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        attachedRecyclerView = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        attachedRecyclerView = null
     }
 
     private class DockDiffCallback : DiffUtil.ItemCallback<DockItem>() {
