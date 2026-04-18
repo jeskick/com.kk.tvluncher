@@ -67,6 +67,11 @@ class MainActivity : FragmentActivity() {
     private var isWeatherExpanded = false
     private var weatherCollapsedH = 0
 
+    // ── HOME 键双击检测（短按切壁纸 / 连按两次呼出 Dock）──────────────────────
+    private var lastHomeTimestamp = 0L
+    private val homeSwitchDelayMs = 320L
+    private val homePendingSwitch = Runnable { viewModel.nextWallpaper() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -93,6 +98,33 @@ class MainActivity : FragmentActivity() {
         applyUiSettings()
         // 回到桌面时保持纯背景，不自动弹出 dock
         binding.root.requestFocus()
+    }
+
+    /**
+     * HOME 键按下时，若 Launcher 已在前台（singleTask），系统只调用 onNewIntent。
+     * 逻辑：
+     *   - 第一次 HOME → postDelayed 320ms 做"切换壁纸"
+     *   - 320ms 内再次 HOME → 取消切换，显示 Dock
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val isHome = intent.action == Intent.ACTION_MAIN &&
+                     intent.hasCategory(Intent.CATEGORY_HOME)
+        if (!isHome) return
+
+        val now = System.currentTimeMillis()
+        val gap = now - lastHomeTimestamp
+        lastHomeTimestamp = now
+
+        if (gap in 1..homeSwitchDelayMs) {
+            // 连按：取消"切壁纸"，改为显示 Dock
+            mainHandler.removeCallbacks(homePendingSwitch)
+            resetDockHideTimer()
+        } else {
+            // 单按：延迟执行"切壁纸"，给第二下 HOME 留 320ms 的判定窗口
+            mainHandler.removeCallbacks(homePendingSwitch)
+            mainHandler.postDelayed(homePendingSwitch, homeSwitchDelayMs)
+        }
     }
 
     override fun onDestroy() {

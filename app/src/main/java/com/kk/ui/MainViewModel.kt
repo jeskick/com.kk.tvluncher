@@ -204,6 +204,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * 手动切换到下一张壁纸（不重启轮播 Job，只是 emit 一张新图）。
+     * 用于 HOME 键短按切换。
+     */
+    fun nextWallpaper() {
+        if (smbImageList.isEmpty()) {
+            // 列表尚未就绪，回退到立刻换一张内置图
+            _backgroundPath.value = getBuiltinWallpaper()
+            return
+        }
+        val current = _backgroundPath.value
+        var next = smbImageList.random()
+        if (smbImageList.size > 1) {
+            var tries = 0
+            while (next == current && tries < 5) {
+                next = smbImageList.random(); tries++
+            }
+        }
+        _backgroundPath.value = next
+    }
+
+    /**
      * 根据 URL 协议自动选择加载方式（SMB / WebDAV / HTTP）。
      * 供 MainActivity 在 Dispatchers.IO 中调用，再把 ByteArray 交给 Glide。
      */
