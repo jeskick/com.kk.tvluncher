@@ -2,6 +2,10 @@
 
 一款为 **Android TV（Sony BRAVIA 等）** 定制的启动器，支持壁纸轮播、Dock 快捷应用、实时天气、自定义透明图标等功能。
 
+![home-default](demo/01-home-default.png)
+
+> 完整运行效果见 [`demo/README.md`](demo/README.md)（13 张实拍截图，按使用场景分类）。
+
 ---
 
 ## 功能特性
@@ -98,6 +102,21 @@ assets/icons/com.netflix.ninja.png
 assets/icons/com.disney.disneyplus.png
 ...
 ```
+
+---
+
+## 界面预览
+
+| 场景 | 截图 |
+|------|------|
+| **默认桌面**（无焦点，Dock 隐藏） | ![home](demo/13-home-clean.png) |
+| **Dock 唤起** · 横幅 Banner 图标 | ![dock](demo/03-dock-focus-youtube.png) |
+| **天气卡片**·获得焦点右侧展开 5 日预报 | ![weather](demo/04-weather-expanded-with-dock.png) |
+| **全部应用抽屉**·网格浏览 | ![drawer](demo/07-app-drawer.png) |
+| **选择应用**·多选 Dock 快捷方式 | ![picker](demo/12-app-picker-multiselect.png) |
+| **设置**·壁纸幻灯片与过渡动画 | ![settings](demo/05-settings-slideshow.png) |
+
+更多场景（不同壁纸轮播、内置壁纸、Dock 与天气并存等）请见 [`demo/README.md`](demo/README.md)。
 
 ---
 
