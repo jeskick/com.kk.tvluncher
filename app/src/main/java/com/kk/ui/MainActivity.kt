@@ -31,6 +31,9 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.kk.tvlauncher.R
 import com.kk.tvlauncher.databinding.ActivityMainBinding
+import com.kk.tvlauncher.ui.lock.DesktopLock
+import com.kk.tvlauncher.ui.lock.KeyDecision
+import com.kk.tvlauncher.ui.lock.LockInputGuard
 import com.kk.tvlauncher.ui.picker.AppPickerActivity
 import com.kk.tvlauncher.ui.settings.SettingsActivity
 import com.kk.tvlauncher.utils.LunarCalendar
@@ -71,6 +74,14 @@ class MainActivity : FragmentActivity() {
     private var lastHomeTimestamp = 0L
     private val homeSwitchDelayMs = 320L
     private val homePendingSwitch = Runnable { viewModel.nextWallpaper() }
+    private val lockGuard by lazy {
+        LockInputGuard(this) { locked ->
+            if (locked) {
+                mainHandler.removeCallbacks(homePendingSwitch)
+                mainHandler.removeCallbacks(dockHideRunnable)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,6 +109,12 @@ class MainActivity : FragmentActivity() {
         applyUiSettings()
         // 回到桌面时保持纯背景，不自动弹出 dock
         binding.root.requestFocus()
+        lockGuard.start()
+    }
+
+    override fun onPause() {
+        lockGuard.stop()
+        super.onPause()
     }
 
     /**
@@ -111,6 +128,7 @@ class MainActivity : FragmentActivity() {
         val isHome = intent.action == Intent.ACTION_MAIN &&
                      intent.hasCategory(Intent.CATEGORY_HOME)
         if (!isHome) return
+        if (DesktopLock.isLocked(this)) return
 
         val now = System.currentTimeMillis()
         val gap = now - lastHomeTimestamp
@@ -383,6 +401,11 @@ class MainActivity : FragmentActivity() {
     // ── 遥控器按键拦截（任意按键重置 Dock 隐藏计时器）─────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        when (lockGuard.decide(event)) {
+            KeyDecision.CONSUME -> return true
+            KeyDecision.SYSTEM -> return super.dispatchKeyEvent(event)
+            KeyDecision.UI -> Unit
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
             // Dock 不可见时的"唤出"：直接显示 Dock 并吃掉这个按键，
             // 避免该按键被系统继续用于焦点搜索（否则焦点会被冲到屏幕边缘外）。

@@ -1,6 +1,7 @@
 package com.kk.tvlauncher.ui.picker
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
@@ -9,6 +10,8 @@ import com.kk.tvlauncher.data.AppRepository
 import com.kk.tvlauncher.data.DockRepository
 import com.kk.tvlauncher.databinding.ActivityAppPickerBinding
 import com.kk.tvlauncher.ui.MainViewModel
+import com.kk.tvlauncher.ui.lock.KeyDecision
+import com.kk.tvlauncher.ui.lock.LockInputGuard
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,6 +24,7 @@ class AppPickerActivity : FragmentActivity() {
     private lateinit var adapter: AppPickerAdapter
     private val dockRepo by lazy { DockRepository(this) }
     private val selectedPackages = mutableSetOf<String>()
+    private val lockGuard by lazy { LockInputGuard(this, armWhenUnlocked = false) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +51,24 @@ class AppPickerActivity : FragmentActivity() {
         binding.btnCancel.setOnClickListener { finish() }
 
         loadApps()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lockGuard.start()
+    }
+
+    override fun onPause() {
+        lockGuard.stop()
+        super.onPause()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        return when (lockGuard.decide(event)) {
+            KeyDecision.CONSUME -> true
+            KeyDecision.SYSTEM -> super.dispatchKeyEvent(event)
+            KeyDecision.UI -> super.dispatchKeyEvent(event)
+        }
     }
 
     private fun loadApps() {

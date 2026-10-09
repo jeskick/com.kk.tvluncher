@@ -563,7 +563,232 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ⑤────────────────── 系统 ─────────────────────────── -->
+            <!-- ⑤────────────────── 安全 ─────────────────────────── -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="安全"
+                android:textColor="@color/text_label"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textAllCaps="true"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_section_card"
+                android:padding="20dp"
+                android:layout_marginBottom="20dp">
+
+                <CheckBox
+                    android:id="@+id/cbLockEnabled"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="开启定时锁定"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:buttonTint="@color/accent"
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="定时锁定（每天）"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="开始"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:id="@+id/btnLockStartMinus"
+                                android:layout_width="46dp"
+                                android:layout_height="46dp"
+                                android:gravity="center"
+                                android:text="－"
+                                android:textColor="@color/text_primary"
+                                android:textSize="18sp"
+                                android:background="@drawable/bg_top_btn"
+                                android:focusable="true"
+                                android:clickable="true" />
+
+                            <TextView
+                                android:id="@+id/tvLockStart"
+                                android:layout_width="0dp"
+                                android:layout_height="46dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="8dp"
+                                android:layout_marginEnd="8dp"
+                                android:gravity="center"
+                                android:text="22:00"
+                                android:textColor="@color/text_primary"
+                                android:textSize="16sp"
+                                android:background="@drawable/bg_input" />
+
+                            <TextView
+                                android:id="@+id/btnLockStartPlus"
+                                android:layout_width="46dp"
+                                android:layout_height="46dp"
+                                android:gravity="center"
+                                android:text="＋"
+                                android:textColor="@color/text_primary"
+                                android:textSize="18sp"
+                                android:background="@drawable/bg_top_btn"
+                                android:focusable="true"
+                                android:clickable="true" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="结束"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:id="@+id/btnLockEndMinus"
+                                android:layout_width="46dp"
+                                android:layout_height="46dp"
+                                android:gravity="center"
+                                android:text="－"
+                                android:textColor="@color/text_primary"
+                                android:textSize="18sp"
+                                android:background="@drawable/bg_top_btn"
+                                android:focusable="true"
+                                android:clickable="true" />
+
+                            <TextView
+                                android:id="@+id/tvLockEnd"
+                                android:layout_width="0dp"
+                                android:layout_height="46dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="8dp"
+                                android:layout_marginEnd="8dp"
+                                android:gravity="center"
+                                android:text="07:00"
+                                android:textColor="@color/text_primary"
+                                android:textSize="16sp"
+                                android:background="@drawable/bg_input" />
+
+                            <TextView
+                                android:id="@+id/btnLockEndPlus"
+                                android:layout_width="46dp"
+                                android:layout_height="46dp"
+                                android:gravity="center"
+                                android:text="＋"
+                                android:textColor="@color/text_primary"
+                                android:textSize="18sp"
+                                android:background="@drawable/bg_top_btn"
+                                android:focusable="true"
+                                android:clickable="true" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="开启后，每天到开始时间自动锁定，到结束时间自动解锁。不开启则不定时，不影响密码。"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="16dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="密码"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/tvLockPassword"
+                        android:layout_width="0dp"
+                        android:layout_height="46dp"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:text="下 下 上 左 右"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:background="@drawable/bg_input"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:layout_marginEnd="10dp" />
+
+                    <TextView
+                        android:id="@+id/btnSetLockPassword"
+                        android:layout_width="wrap_content"
+                        android:layout_height="46dp"
+                        android:gravity="center"
+                        android:paddingStart="18dp"
+                        android:paddingEnd="18dp"
+                        android:text="设置密码"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:background="@drawable/bg_btn_accent"
+                        android:focusable="true"
+                        android:clickable="true" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="密码随时可用，不必开启定时。默认 下 下 上 左 右，再按一遍解锁。锁定后桌面保持原样，只在正中透明显示「已锁定」。"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp"
+                    android:layout_marginTop="10dp" />
+            </LinearLayout>
+
+            <!-- ⑥────────────────── 系统 ─────────────────────────── -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

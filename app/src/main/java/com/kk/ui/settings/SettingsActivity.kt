@@ -1,6 +1,7 @@
 package com.kk.tvlauncher.ui.settings
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import com.kk.tvlauncher.BuildConfig
@@ -8,8 +9,11 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -23,6 +27,9 @@ import com.kk.tvlauncher.R
 import com.kk.tvlauncher.data.SmbScanner
 import com.kk.tvlauncher.databinding.ActivitySettingsBinding
 import com.kk.tvlauncher.ui.MainViewModel
+import com.kk.tvlauncher.ui.lock.DesktopLock
+import com.kk.tvlauncher.ui.lock.KeyDecision
+import com.kk.tvlauncher.ui.lock.LockInputGuard
 import kotlinx.coroutines.launch
 
 class SettingsActivity : FragmentActivity() {
@@ -53,6 +60,17 @@ class SettingsActivity : FragmentActivity() {
     )
     private var selectedBuiltin = "随机切换"
 
+    private var lockStartMin = DesktopLock.DEFAULT_START
+    private var lockEndMin = DesktopLock.DEFAULT_END
+    private var editedPassword: IntArray? = null
+    private var recordingPassword = false
+    private var passwordDialog: Dialog? = null
+    private val lockGuard by lazy {
+        LockInputGuard(this, armWhenUnlocked = false) { locked ->
+            if (locked) passwordDialog?.dismiss()
+        }
+    }
+
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -71,6 +89,26 @@ class SettingsActivity : FragmentActivity() {
         loadSavedValues()
         setupColorPicker()
         setupButtons()
+        setupLockControls()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lockGuard.start()
+    }
+
+    override fun onPause() {
+        lockGuard.stop()
+        super.onPause()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (recordingPassword) return super.dispatchKeyEvent(event)
+        return when (lockGuard.decide(event)) {
+            KeyDecision.CONSUME -> true
+            KeyDecision.SYSTEM -> super.dispatchKeyEvent(event)
+            KeyDecision.UI -> super.dispatchKeyEvent(event)
+        }
     }
 
     private fun loadSavedValues() {
@@ -128,6 +166,99 @@ class SettingsActivity : FragmentActivity() {
 
         // 焦点颜色
         selectedColorHex = prefs.getString("focus_color", "#CCFFFFFF") ?: "#CCFFFFFF"
+
+        binding.cbLockEnabled.isChecked = prefs.getBoolean(DesktopLock.KEY_ENABLED, false)
+        lockStartMin = prefs.getInt(DesktopLock.KEY_START, DesktopLock.DEFAULT_START)
+        lockEndMin = prefs.getInt(DesktopLock.KEY_END, DesktopLock.DEFAULT_END)
+        refreshLockTimes()
+        binding.tvLockPassword.text = DesktopLock.format(DesktopLock.password(this))
+    }
+
+    private fun setupLockControls() {
+        binding.btnLockStartMinus.setOnClickListener { shiftLockTime(start = true, delta = -60) }
+        binding.btnLockStartPlus.setOnClickListener { shiftLockTime(start = true, delta = 60) }
+        binding.btnLockEndMinus.setOnClickListener { shiftLockTime(start = false, delta = -60) }
+        binding.btnLockEndPlus.setOnClickListener { shiftLockTime(start = false, delta = 60) }
+        binding.btnSetLockPassword.setOnClickListener { showPasswordRecorder() }
+    }
+
+    private fun shiftLockTime(start: Boolean, delta: Int) {
+        if (start) lockStartMin = (lockStartMin + delta + 1440) % 1440
+        else lockEndMin = (lockEndMin + delta + 1440) % 1440
+        refreshLockTimes()
+    }
+
+    private fun refreshLockTimes() {
+        binding.tvLockStart.text = formatHour(lockStartMin)
+        binding.tvLockEnd.text = formatHour(lockEndMin)
+    }
+
+    private fun formatHour(min: Int) = "%02d:%02d".format(min / 60, min % 60)
+
+    private fun showPasswordRecorder() {
+        val hint = TextView(this).apply {
+            text = "请依次按方向键\n按确定键保存，返回键取消"
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setPadding(48, 40, 48, 16)
+        }
+        val seq = TextView(this).apply {
+            text = " "
+            setTextColor(Color.WHITE)
+            textSize = 28f
+            gravity = Gravity.CENTER
+            setPadding(48, 8, 48, 40)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(0xF01A1A2E.toInt())
+            addView(hint)
+            addView(seq)
+        }
+        val draft = ArrayList<Int>()
+        val dialog = Dialog(this)
+        dialog.setContentView(box)
+        dialog.setCancelable(true)
+        recordingPassword = true
+        passwordDialog = dialog
+        dialog.setOnDismissListener {
+            recordingPassword = false
+            if (passwordDialog === dialog) passwordDialog = null
+        }
+        dialog.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return@setOnKeyListener true
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (draft.size < 12) {
+                        draft.add(keyCode)
+                        seq.text = DesktopLock.format(draft.toIntArray())
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    if (draft.isNotEmpty()) {
+                        editedPassword = draft.toIntArray()
+                        binding.tvLockPassword.text = DesktopLock.format(editedPassword!!)
+                        dialog.dismiss()
+                    }
+                    true
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    dialog.dismiss()
+                    true
+                }
+                else -> true
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            (420 * resources.displayMetrics.density).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun setupColorPicker() {
@@ -218,7 +349,11 @@ class SettingsActivity : FragmentActivity() {
         binding.btnSave.setOnClickListener {
             val intervalStr = binding.etSlideshowInterval.text.toString().trim()
             val interval = intervalStr.toIntOrNull()?.coerceIn(3, 3600) ?: 10
-            prefs.edit()
+            val lockEnabled = binding.cbLockEnabled.isChecked
+            val wasEnabled = prefs.getBoolean(DesktopLock.KEY_ENABLED, false)
+            val wasStart = prefs.getInt(DesktopLock.KEY_START, DesktopLock.DEFAULT_START)
+            val wasEnd = prefs.getInt(DesktopLock.KEY_END, DesktopLock.DEFAULT_END)
+            val editor = prefs.edit()
                 .putString("weather_city", binding.etWeatherCity.text.toString().trim())
                 .putString("weather_api_key", binding.etWeatherApiKey.text.toString().trim())
                 .putString("smb_user", binding.etSmbUser.text.toString().trim())
@@ -229,7 +364,20 @@ class SettingsActivity : FragmentActivity() {
                 .putInt("ui_alpha", binding.seekbarAlpha.progress)
                 .putString("focus_color", selectedColorHex)
                 .putString("builtin_wallpaper", selectedBuiltin)
-                .apply()
+                .putBoolean(DesktopLock.KEY_ENABLED, lockEnabled)
+                .putInt(DesktopLock.KEY_START, lockStartMin)
+                .putInt(DesktopLock.KEY_END, lockEndMin)
+            editedPassword?.let { editor.putString(DesktopLock.KEY_PASSWORD, DesktopLock.encode(it)) }
+            val scheduleChanged = lockEnabled != wasEnabled || lockStartMin != wasStart || lockEndMin != wasEnd
+            if (scheduleChanged) {
+                if (!lockEnabled) {
+                    editor.putBoolean(DesktopLock.KEY_WINDOW, false)
+                } else {
+                    val inside = DesktopLock.inWindow(DesktopLock.nowMinutes(), lockStartMin, lockEndMin)
+                    editor.putBoolean(DesktopLock.KEY_WINDOW, !inside)
+                }
+            }
+            editor.apply()
             Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
             finish()
         }
