@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TV Launcher</string>
+    <string name="app_icon_desc">应用图标</string>
+    <string name="settings">设置</string>
+    <string name="all_apps">所有应用</string>
+    <string name="add_app">添加应用</string>
+    <string name="select_dock_apps">选择 Dock 应用</string>
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
+    <string name="save">保存</string>
+</resources>

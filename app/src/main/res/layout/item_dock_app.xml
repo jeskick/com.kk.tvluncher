@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/dock_item_width"
+    android:layout_height="match_parent"
+    android:focusable="true"
+    android:clickable="true"
+    android:background="@drawable/bg_dock_item"
+    android:elevation="2dp">
+
+    <!-- Banner 图（16:9 宽幅，有时填满整个卡片） -->
+    <ImageView
+        android:id="@+id/ivBanner"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null"
+        android:visibility="gone" />
+
+    <!-- 透明自定义 Logo（居中显示，留空让玻璃背景透出） -->
+    <ImageView
+        android:id="@+id/ivCustomIcon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="18dp"
+        android:scaleType="centerInside"
+        android:contentDescription="@null"
+        android:visibility="gone" />
+
+    <!-- 无 Banner 时：正方形图标 + 应用名 -->
+    <LinearLayout
+        android:id="@+id/layoutFallback"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="10dp">
+
+        <ImageView
+            android:id="@+id/ivIcon"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/tvAppName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="10sp"
+            android:textColor="@color/text_primary" />
+
+    </LinearLayout>
+
+</FrameLayout>

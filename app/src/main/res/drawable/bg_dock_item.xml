@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 玻璃拟态效果：半透明白色 + 细边框 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 获得焦点：更亮的玻璃 -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#38FFFFFF" />
+            <corners android:radius="16dp" />
+            <stroke android:width="1.5dp" android:color="#70FFFFFF" />
+        </shape>
+    </item>
+    <!-- 按下 -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#55FFFFFF" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <!-- 默认：轻盈玻璃 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#14FFFFFF" />
+            <corners android:radius="16dp" />
+            <stroke android:width="1dp" android:color="#28FFFFFF" />
+        </shape>
+    </item>
+</selector>

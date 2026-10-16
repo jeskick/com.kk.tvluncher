@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="100dp"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
+    android:focusable="true"
+    android:clickable="true">
+
+    <!-- 卡片背景（含焦点/选中状态） -->
+    <LinearLayout
+        android:id="@+id/itemContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingTop="14dp"
+        android:paddingBottom="12dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:background="@drawable/bg_picker_item"
+        android:focusable="false">
+
+        <ImageView
+            android:id="@+id/ivIcon"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/tvAppName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textSize="10sp"
+            android:lineSpacingMultiplier="1.1"
+            android:textColor="@color/text_primary" />
+
+    </LinearLayout>
+
+    <!-- 右上角选中角标 -->
+    <ImageView
+        android:id="@+id/ivCheckBadge"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="3dp"
+        android:src="@drawable/ic_check_badge"
+        android:visibility="gone" />
+
+</FrameLayout>
