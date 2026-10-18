@@ -3,13 +3,13 @@ package com.kk.tvlauncher.ui.settings
 import android.app.AlertDialog
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.kk.tvlauncher.R
@@ -46,6 +46,7 @@ object WallpaperPicker {
         dialog.setOnDismissListener { alive = false }
 
         lateinit var openDir: (String) -> Unit
+        lateinit var choose: (String, Boolean) -> Unit
 
         fun render(items: List<WallpaperBrowser.Item>, focusFirst: Boolean) {
             if (!alive) return
@@ -57,22 +58,28 @@ object WallpaperPicker {
             rows += items.take(300)
             useDir.visibility = if (stack.isNotEmpty()) View.VISIBLE else View.GONE
             rows.forEach { item ->
-                val row = rowView(activity, item) {
-                    when {
-                        item.location == UP -> {
-                            stack.removeLast()
-                            if (stack.isEmpty()) render(rootItems, true) else openDir(stack.last())
+                val row = rowView(
+                    activity,
+                    item,
+                    onClick = {
+                        when {
+                            item.location == UP -> {
+                                stack.removeLast()
+                                if (stack.isEmpty()) render(rootItems, true) else openDir(stack.last())
+                            }
+                            item.directory -> choose(item.location, true)
+                            else -> choose(item.location, false)
                         }
-                        item.directory -> {
+                    },
+                    onOpen = if (item.directory && item.location != UP) {
+                        {
                             stack.addLast(item.location)
                             openDir(item.location)
                         }
-                        else -> {
-                            onPick(item.location)
-                            dialog.dismiss()
-                        }
+                    } else {
+                        null
                     }
-                }
+                )
                 val gap = (6 * activity.resources.displayMetrics.density).toInt()
                 row.layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -89,7 +96,17 @@ object WallpaperPicker {
                 focusFirst -> list.getChildAt(0)
                 else -> null
             }
-            target?.requestFocus()
+            target?.post { target.requestFocus() }
+        }
+
+        choose = { location, directory ->
+            val path = if (directory && location.startsWith("smb://") && !location.endsWith("/")) {
+                "$location/"
+            } else {
+                location
+            }
+            onPick(path)
+            dialog.dismiss()
         }
 
         openDir = { location ->
@@ -101,27 +118,32 @@ object WallpaperPicker {
                 }.orEmpty()
                 if (!alive || stack.lastOrNull() != location) return@launch
                 progress.visibility = View.GONE
-                status.text = if (children.isEmpty()) "这个目录里没有图片或子目录" else location
+                status.text = if (children.isEmpty()) "这个目录里没有图片或子目录" else "按确定选用，按右键进入子目录"
                 render(children, true)
             }
         }
 
         useDir.setOnClickListener {
             val dir = stack.lastOrNull() ?: return@setOnClickListener
-            if (shown.none { !it.directory }) {
-                Toast.makeText(activity, "这个目录里没有图片", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val path = if (dir.startsWith("smb://") && !dir.endsWith("/")) "$dir/" else dir
-            onPick(path)
-            dialog.dismiss()
+            choose(dir, true)
         }
 
+        dialog.setOnShowListener {
+            dialog.window?.setLayout(
+                (680 * activity.resources.displayMetrics.density).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    val last = list.getChildAt(list.childCount - 1)
+                    (if (useDir.visibility == View.VISIBLE) useDir else last)?.requestFocus()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
         dialog.show()
-        dialog.window?.setLayout(
-            (680 * activity.resources.displayMetrics.density).toInt(),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
 
         activity.lifecycleScope.launch {
             val local = withContext(Dispatchers.IO) { WallpaperBrowser.localPlaces(activity) }
@@ -141,17 +163,27 @@ object WallpaperPicker {
             rootItems += shares
             progress.visibility = View.GONE
             if (stack.isEmpty()) {
-                status.text = "本机 ${local.size} 个目录，局域网 ${shares.size} 个共享"
+                status.text = "本机 ${local.size} 个目录，局域网 ${shares.size} 个共享。目录按确定选用"
                 render(rootItems, list.childCount == 0)
             }
         }
     }
 
-    private fun rowView(activity: FragmentActivity, item: WallpaperBrowser.Item, onClick: () -> Unit): TextView {
+    private fun rowView(
+        activity: FragmentActivity,
+        item: WallpaperBrowser.Item,
+        onClick: () -> Unit,
+        onOpen: (() -> Unit)?
+    ): TextView {
         val pad = (10 * activity.resources.displayMetrics.density).toInt()
+        val label = when {
+            item.location == UP -> item.label
+            item.directory -> "${item.label}    确定选用"
+            item.detail.isBlank() -> item.label
+            else -> "${item.label}    ${item.detail}"
+        }
         return TextView(activity).apply {
-            text = if (item.detail.isBlank() || item.location == UP) item.label
-            else "${item.label}    ${item.detail}"
+            text = label
             textSize = 15f
             gravity = Gravity.CENTER_VERTICAL
             setTextColor(activity.getColor(R.color.text_primary))
@@ -163,6 +195,32 @@ object WallpaperPicker {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.MIDDLE
             setOnClickListener { onClick() }
+            setOnFocusChangeListener { v, hasFocus ->
+                v.setBackgroundResource(if (hasFocus) R.drawable.bg_btn_accent else R.drawable.bg_input)
+                (v as TextView).setTextColor(
+                    activity.getColor(if (hasFocus) R.color.bg_dark else R.color.text_primary)
+                )
+            }
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_CENTER,
+                    KeyEvent.KEYCODE_ENTER,
+                    KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                        onClick()
+                        true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (onOpen != null) {
+                            onOpen()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    else -> false
+                }
+            }
         }
     }
 }

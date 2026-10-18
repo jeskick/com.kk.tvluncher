@@ -56,22 +56,25 @@ object SmbImageFetcher {
 
     /** 列出目录下所有图片文件，返回完整 smb:// URL 列表 */
     fun listImages(dirUrl: String, user: String = "", pass: String = ""): List<String> {
+        for ((account, password) in accounts(user, pass)) {
+            val found = listImagesWith(dirUrl, account, password)
+            if (found.isNotEmpty()) return found
+        }
+        return emptyList()
+    }
+
+    private fun listImagesWith(dirUrl: String, user: String, pass: String): List<String> {
         return try {
             val ctx = buildContext(user, pass)
             val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
             val dir = SmbFile(url, ctx)
 
             // 列出所有条目，过滤图片文件
-            val allEntries = dir.listFiles() ?: return emptyList()
-            val result = allEntries.mapNotNull { f ->
-                try {
-                    val name = f.name.lowercase()
-                    val isImage = name.endsWith(".jpg") || name.endsWith(".jpeg") ||
-                            name.endsWith(".png") || name.endsWith(".webp")
-                    if (isImage) f.url.toString() else null
-                } catch (e: Exception) {
-                    null
-                }
+            val allEntries = dir.list() ?: return emptyList()
+            val result = allEntries.mapNotNull { raw ->
+                val name = raw.trim().trim('/')
+                if (!isImageName(name)) return@mapNotNull null
+                url.trimEnd('/') + "/" + name
             }
             result
         } catch (e: Exception) {
@@ -95,18 +98,23 @@ object SmbImageFetcher {
                     SmbEntry(name, url + name + "/", true)
                 }.sortedBy { it.name.lowercase() }
             }
-            val all = dir.listFiles() ?: return emptyList()
-            all.mapNotNull { file ->
-                try {
-                    val name = file.name.trimEnd('/').substringAfterLast('/')
-                    if (name.isBlank() || name.startsWith(".") || name.endsWith("$")) return@mapNotNull null
-                    val isDir = file.isDirectory
-                    if (!isDir && !isImageName(name)) return@mapNotNull null
-                    val full = url.trimEnd('/') + "/" + name + if (isDir) "/" else ""
-                    SmbEntry(name, full, isDir)
-                } catch (_: Exception) {
-                    null
+            val names = dir.list() ?: return emptyList()
+            return names.mapNotNull { raw ->
+                val name = raw.trim().trim('/')
+                if (name.isBlank() || name.startsWith(".") || name.endsWith("$")) return@mapNotNull null
+                val image = isImageName(name)
+                val isDir = if (image) {
+                    false
+                } else {
+                    try {
+                        SmbFile(url + name, ctx).isDirectory
+                    } catch (_: Exception) {
+                        false
+                    }
                 }
+                if (!image && !isDir) return@mapNotNull null
+                val full = url.trimEnd('/') + "/" + name + if (isDir) "/" else ""
+                SmbEntry(name, full, isDir)
             }.sortedWith(compareBy({ !it.directory }, { it.name.lowercase() }))
         } catch (e: Exception) {
             Log.w("SmbImageFetcher", "listEntries $dirUrl: ${e.message}")
@@ -139,11 +147,27 @@ object SmbImageFetcher {
      * 比 openStream 更安全：调用方不需要管理流的生命周期。
      */
     fun loadBytes(fileUrl: String, user: String = "", pass: String = ""): ByteArray? {
+        for ((account, password) in accounts(user, pass)) {
+            val bytes = loadBytesWith(fileUrl, account, password)
+            if (bytes != null) return bytes
+        }
+        return null
+    }
+
+    private fun loadBytesWith(fileUrl: String, user: String, pass: String): ByteArray? {
         return try {
             val ctx = buildContext(user, pass)
             SmbFile(fileUrl, ctx).inputStream.use { it.readBytes() }
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun accounts(user: String, pass: String): List<Pair<String, String>> {
+        val tries = mutableListOf<Pair<String, String>>()
+        if (user.isNotBlank()) tries += user to pass
+        if (tries.none { it.first.equals("Guest", true) }) tries += "Guest" to ""
+        if (user.isBlank()) tries += "" to ""
+        return tries
     }
 }
