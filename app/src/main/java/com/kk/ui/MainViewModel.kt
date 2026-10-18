@@ -13,8 +13,10 @@ import com.kk.tvlauncher.data.DockRepository
 import com.kk.tvlauncher.data.HttpImageFetcher
 import com.kk.tvlauncher.data.SmbImageFetcher
 import com.kk.tvlauncher.data.SmbJImageFetcher
+import com.kk.tvlauncher.data.WallpaperBrowser
 import com.kk.tvlauncher.data.WebDavImageFetcher
 import com.kk.tvlauncher.data.WeatherRepository
+import java.io.File
 import com.kk.tvlauncher.model.AppInfo
 import com.kk.tvlauncher.model.DockItem
 import com.kk.tvlauncher.model.WeatherInfo
@@ -116,12 +118,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         when {
-            // 1. 用户手动指定了具体文件路径
+            !saved.isNullOrBlank() && isDirectorySource(saved) -> {
+                if (isRemote(saved)) loadSmbSlideshow(saved, smbUser, smbPass, intervalSec.toLong())
+                else loadLocalSlideshow(saved, intervalSec.toLong())
+            }
             !saved.isNullOrBlank() -> {
                 _backgroundPath.value = saved
             }
-
-            // 2. 随机SMB：从 SMB/WebDAV/HTTP 目录拉取图片做幻灯片
             builtinMode == "随机SMB" -> {
                 loadSmbSlideshow(smbDir, smbUser, smbPass, intervalSec.toLong())
             }
@@ -160,6 +163,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _backgroundPath.value = smbImageList.first()
             runSlideshowLoop(intervalSec)
         }
+    }
+
+    private fun loadLocalSlideshow(dir: String, intervalSec: Long) {
+        slideshowJob = viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) {
+                val folder = File(dir.removePrefix("file://"))
+                folder.listFiles()?.mapNotNull { file ->
+                    if (file.isFile && WallpaperBrowser.isImageName(file.name)) file.absolutePath else null
+                }.orEmpty()
+            }
+            if (!isActive) return@launch
+            if (list.isEmpty()) {
+                runBuiltinSlideshowLoop(intervalSec)
+                return@launch
+            }
+            smbImageList = list.shuffled()
+            _backgroundPath.value = smbImageList.first()
+            runSlideshowLoop(intervalSec)
+        }
+    }
+
+    private fun isRemote(path: String) =
+        path.startsWith("smb://") || path.startsWith("http://") || path.startsWith("https://")
+
+    private fun isDirectorySource(path: String): Boolean {
+        if (isRemote(path)) {
+            val name = path.trimEnd('/').substringAfterLast('/')
+            return !WallpaperBrowser.isImageName(name)
+        }
+        return File(path.removePrefix("file://")).isDirectory
     }
 
     /** 使用内置壁纸启动幻灯片 */

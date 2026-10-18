@@ -80,6 +80,37 @@ object SmbImageFetcher {
         }
     }
 
+    data class SmbEntry(val name: String, val url: String, val directory: Boolean)
+
+    /** 列出共享或目录。目录在前，隐藏系统共享（IPC$ 等）。 */
+    fun listEntries(dirUrl: String, user: String = "", pass: String = ""): List<SmbEntry> {
+        return try {
+            val ctx = buildContext(user, pass)
+            val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
+            val all = SmbFile(url, ctx).listFiles() ?: return emptyList()
+            all.mapNotNull { file ->
+                try {
+                    val name = file.name.trimEnd('/').substringAfterLast('/')
+                    if (name.isBlank() || name.startsWith(".") || name.endsWith("$")) return@mapNotNull null
+                    val isDir = file.isDirectory
+                    if (!isDir && !isImageName(name)) return@mapNotNull null
+                    val full = url.trimEnd('/') + "/" + name + if (isDir) "/" else ""
+                    SmbEntry(name, full, isDir)
+                } catch (_: Exception) {
+                    null
+                }
+            }.sortedWith(compareBy({ !it.directory }, { it.name.lowercase() }))
+        } catch (e: Exception) {
+            Log.w("SmbImageFetcher", "listEntries $dirUrl: ${e.message}")
+            emptyList()
+        }
+    }
+
+    fun isImageName(name: String): Boolean {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "webp" || ext == "gif" || ext == "bmp"
+    }
+
     /** 打开输入流（调用方负责关闭） */
     fun openStream(fileUrl: String, user: String = "", pass: String = ""): InputStream? {
         return try {

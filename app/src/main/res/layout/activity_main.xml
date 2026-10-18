@@ -6,7 +6,10 @@
     android:clipChildren="false"
     android:clipToPadding="false"
     android:background="@color/bg_dark"
-    android:descendantFocusability="afterDescendants">
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:defaultFocusHighlightEnabled="false"
+    android:descendantFocusability="beforeDescendants">
 
     <!-- 背景图片（全屏，最底层） -->
     <ImageView

@@ -100,17 +100,14 @@ class MainActivity : FragmentActivity() {
         applyUiSettings()
 
         mainHandler.post(clockRunnable)
-
-        // 启动默认无焦点：根布局抢占焦点，子 View 均无焦点
-        binding.root.requestFocus()
+        holdIdleFocus()
     }
 
     override fun onResume() {
         super.onResume()
         viewModel.loadAll()
         applyUiSettings()
-        // 回到桌面时保持纯背景，不自动弹出 dock
-        binding.root.requestFocus()
+        if (!isAppDrawerVisible) holdIdleFocus()
         lockGuard.start()
     }
 
@@ -337,8 +334,21 @@ class MainActivity : FragmentActivity() {
         rv.post { rv.layoutManager?.findViewByPosition(safe)?.requestFocus() }
     }
 
+    /** 桌面空闲时焦点停在根布局上，设置和天气都不显示焦点框。 */
+    private fun holdIdleFocus() {
+        val root = binding.root
+        root.isFocusable = true
+        root.isFocusableInTouchMode = true
+        root.descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
+        root.defaultFocusHighlightEnabled = false
+        root.post {
+            if (!isAppDrawerVisible) root.requestFocus()
+        }
+    }
+
     private fun hideDockWithAnim() {
         if (!isDockVisible || isAppDrawerVisible) return
+        if (under(currentFocus, binding.llDockContainer)) holdIdleFocus()
         isDockVisible = false
         binding.llDockContainer.animate()
             .translationY(binding.llDockContainer.height.toFloat())
@@ -479,7 +489,7 @@ class MainActivity : FragmentActivity() {
         if (onWifi) rowTop = binding.btnWifi
         if (onDock && focus != null) dockIndex = dockIndexOf(focus)
         if (!onSettings && !onWifi && !onWeather && !onDock) {
-            binding.btnSettings.requestFocus()
+            openDockRow()
             return true
         }
         return when (keyCode) {

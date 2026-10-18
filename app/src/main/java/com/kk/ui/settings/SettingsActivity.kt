@@ -1,9 +1,12 @@
 package com.kk.tvlauncher.ui.settings
 
+import android.Manifest
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import com.kk.tvlauncher.BuildConfig
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -71,16 +74,9 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
-    private val pickImageLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            val uriStr = uri.toString()
-            prefs.edit().putString("background_path", uriStr).apply()
-            binding.tvBgPath.text = uri.lastPathSegment ?: uriStr
-        }
-    }
+    private val storagePermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { openWallpaperPicker() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,11 +112,7 @@ class SettingsActivity : FragmentActivity() {
         val builtinPref = prefs.getString("builtin_wallpaper", "随机切换")
         selectedBuiltin = builtinPref ?: "随机切换"
 
-        binding.tvBgPath.text = when {
-            bgPath == null -> "内置壁纸（${builtinWallpaperMap[selectedBuiltin] ?: selectedBuiltin}）"
-            bgPath.startsWith("content://") -> bgPath.substringAfterLast("/")
-            else -> bgPath
-        }
+        binding.tvBgPath.text = wallpaperLabel(bgPath)
         binding.tvBuiltinWallpaper.text = builtinWallpaperMap[selectedBuiltin] ?: selectedBuiltin
 
         binding.etWeatherCity.setText(prefs.getString("weather_city", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.DEFAULT_WEATHER_CITY)
@@ -328,12 +320,45 @@ class SettingsActivity : FragmentActivity() {
         }
     }
 
+    private fun wallpaperLabel(path: String?): String {
+        if (path.isNullOrBlank()) {
+            return "内置壁纸（${builtinWallpaperMap[selectedBuiltin] ?: selectedBuiltin}）"
+        }
+        val remote = path.startsWith("smb://") || path.startsWith("http://") || path.startsWith("https://")
+        val name = path.trimEnd('/').substringAfterLast('/')
+        val directory = path.endsWith("/") ||
+            (remote && !com.kk.tvlauncher.data.WallpaperBrowser.isImageName(name)) ||
+            (!remote && java.io.File(path.removePrefix("file://")).isDirectory)
+        return if (directory) "目录 $path" else name.ifBlank { path }
+    }
+
+    private fun requestWallpaperPicker() {
+        val perm = if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED) openWallpaperPicker()
+        else storagePermLauncher.launch(arrayOf(perm))
+    }
+
+    private fun openWallpaperPicker() {
+        WallpaperPicker.show(
+            this,
+            binding.etSmbUser.text.toString().trim(),
+            binding.etSmbPass.text.toString()
+        ) { path ->
+            prefs.edit().putString("background_path", path).apply()
+            binding.tvBgPath.text = wallpaperLabel(path)
+        }
+    }
+
     private fun setupButtons() {
         // 本地图片
-        binding.btnPickBg.setOnClickListener { pickImageLauncher.launch(arrayOf("image/*")) }
+        binding.btnPickBg.setOnClickListener { requestWallpaperPicker() }
         binding.btnClearBg.setOnClickListener {
             prefs.edit().remove("background_path").apply()
-            binding.tvBgPath.text = "内置壁纸（$selectedBuiltin）"
+            binding.tvBgPath.text = wallpaperLabel(null)
         }
 
         // 内置壁纸选择
