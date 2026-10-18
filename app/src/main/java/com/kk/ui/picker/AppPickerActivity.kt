@@ -42,6 +42,41 @@ class AppPickerActivity : FragmentActivity() {
         binding.rvApps.apply {
             layoutManager = GridLayoutManager(this@AppPickerActivity, 6)
             adapter = this@AppPickerActivity.adapter
+            onLeaveUp = {
+                binding.btnCancel.requestFocus()
+                true
+            }
+        }
+
+        binding.btnCancel.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    binding.btnConfirm.requestFocus()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    focusPickerAt(0)
+                    true
+                }
+                else -> false
+            }
+        }
+        binding.btnConfirm.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    binding.btnCancel.requestFocus()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    focusPickerAt(0)
+                    true
+                }
+                else -> false
+            }
         }
 
         binding.btnConfirm.setOnClickListener {
@@ -68,6 +103,16 @@ class AppPickerActivity : FragmentActivity() {
             KeyDecision.CONSUME -> true
             KeyDecision.SYSTEM -> super.dispatchKeyEvent(event)
             KeyDecision.UI -> super.dispatchKeyEvent(event)
+        }
+    }
+
+    private fun focusPickerAt(index: Int) {
+        val rv = binding.rvApps
+        val shown = rv.layoutManager?.findViewByPosition(index)
+        if (shown != null) shown.requestFocus()
+        else {
+            rv.scrollToPosition(index)
+            rv.post { rv.layoutManager?.findViewByPosition(index)?.requestFocus() }
         }
     }
 

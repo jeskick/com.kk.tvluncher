@@ -94,12 +94,14 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <androidx.recyclerview.widget.RecyclerView
+            <com.kk.tvlauncher.ui.TvGridRecyclerView
                 android:id="@+id/rvApps"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="20dp"
-                android:clipToPadding="false" />
+                android:clipToPadding="false"
+                android:focusable="false"
+                android:descendantFocusability="afterDescendants" />
 
             <ProgressBar
                 android:id="@+id/progressBar"

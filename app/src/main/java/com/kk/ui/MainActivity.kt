@@ -175,10 +175,18 @@ class MainActivity : FragmentActivity() {
         }
         binding.btnSettings.setOnKeyListener { _, keyCode, event ->
             if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                binding.weatherCard.requestFocus()
-                true
-            } else false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    binding.btnWifi.requestFocus()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    binding.weatherCard.requestFocus()
+                    true
+                }
+                else -> false
+            }
         }
         binding.btnSettings.setOnFocusChangeListener { _, hasFocus ->
             binding.tvSettingsLabel.visibility = if (hasFocus) View.VISIBLE else View.GONE
@@ -194,10 +202,18 @@ class MainActivity : FragmentActivity() {
         }
         binding.btnWifi.setOnKeyListener { _, keyCode, event ->
             if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                binding.weatherCard.requestFocus()
-                true
-            } else false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    binding.btnSettings.requestFocus()
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    binding.weatherCard.requestFocus()
+                    true
+                }
+                else -> false
+            }
         }
         binding.btnWifi.setOnFocusChangeListener { _, hasFocus ->
             val ssid = binding.btnWifi.tag as? String ?: ""
@@ -274,6 +290,7 @@ class MainActivity : FragmentActivity() {
                     binding.btnSettings.requestFocus()
                     true
                 }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> true
                 else -> false
             }
         }
@@ -381,10 +398,30 @@ class MainActivity : FragmentActivity() {
         binding.rvAppDrawer.apply {
             layoutManager = GridLayoutManager(this@MainActivity, 7)
             adapter = appDrawerAdapter
+            onLeaveUp = {
+                binding.btnCloseDrawer.requestFocus()
+                true
+            }
         }
 
         binding.btnCloseDrawer.setOnClickListener { hideAppDrawer() }
+        binding.btnCloseDrawer.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return@setOnKeyListener false
+            focusDrawerAt(0)
+            true
+        }
         binding.appDrawerPanel.visibility = View.GONE
+    }
+
+    private fun focusDrawerAt(index: Int) {
+        val rv = binding.rvAppDrawer
+        val shown = rv.layoutManager?.findViewByPosition(index)
+        if (shown != null) shown.requestFocus()
+        else {
+            rv.scrollToPosition(index)
+            rv.post { rv.layoutManager?.findViewByPosition(index)?.requestFocus() }
+        }
     }
 
     private fun showAppDrawer() {
@@ -451,16 +488,6 @@ class MainActivity : FragmentActivity() {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_BACK -> {
                     if (isAppDrawerVisible) { hideAppDrawer(); return true }
-                }
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    if (isAppDrawerVisible) {
-                        val lm = binding.rvAppDrawer.layoutManager as? GridLayoutManager
-                        val focused = binding.rvAppDrawer.findFocus()
-                        val pos = if (focused != null) binding.rvAppDrawer.getChildAdapterPosition(focused) else -1
-                        if (pos in 0 until (lm?.spanCount ?: 7)) {
-                            hideAppDrawer(); return true
-                        }
-                    }
                 }
             }
         }

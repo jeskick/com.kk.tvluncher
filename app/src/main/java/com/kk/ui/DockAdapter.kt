@@ -12,8 +12,8 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.kk.tvlauncher.R
-import com.kk.tvlauncher.databinding.ItemDockAppBinding
 import com.kk.tvlauncher.databinding.ItemDockAddBinding
+import com.kk.tvlauncher.databinding.ItemDockAppBinding
 import com.kk.tvlauncher.model.DockItem
 
 private const val VIEW_TYPE_APP = 0
@@ -144,6 +144,10 @@ class DockAdapter(
             b.root.setOnKeyListener { _, keyCode, event ->
                 if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
                 when {
+                    keyCode == KeyEvent.KEYCODE_DPAD_UP -> {
+                        b.root.rootView.findViewById<View>(R.id.weatherCard)?.requestFocus()
+                        true
+                    }
                     keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> true
                     keyCode == KeyEvent.KEYCODE_DPAD_LEFT && bindingAdapterPosition == 0 -> {
                         focusPosition(itemCount - 1); true
@@ -180,6 +184,10 @@ class DockAdapter(
             b.root.setOnKeyListener { _, keyCode, event ->
                 if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
                 when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        b.root.rootView.findViewById<View>(R.id.weatherCard)?.requestFocus()
+                        true
+                    }
                     KeyEvent.KEYCODE_DPAD_DOWN -> { onLastItemDownKey(); true }
                     KeyEvent.KEYCODE_DPAD_RIGHT -> { focusPosition(0); true }
                     KeyEvent.KEYCODE_DPAD_LEFT -> {

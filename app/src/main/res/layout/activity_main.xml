@@ -144,7 +144,6 @@
                 android:focusableInTouchMode="false"
                 android:nextFocusUp="@id/btnSettings"
                 android:nextFocusDown="@id/rvDock"
-                android:nextFocusRight="@id/btnSettings"
                 app:cardCornerRadius="18dp"
                 app:cardBackgroundColor="@color/card_bg"
                 app:cardElevation="0dp"
@@ -457,7 +456,9 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
                     android:paddingBottom="8dp"
-                    android:clipToPadding="false" />
+                    android:clipToPadding="false"
+                    android:focusable="false"
+                    android:descendantFocusability="afterDescendants" />
 
             </FrameLayout>
 
