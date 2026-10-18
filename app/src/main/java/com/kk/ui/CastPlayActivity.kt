@@ -4,6 +4,7 @@ import android.app.Activity
 import android.graphics.Color
 import android.net.Uri
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -13,9 +14,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import android.os.Bundle
 import android.os.Looper
+import android.os.PowerManager
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.SurfaceView
+import android.view.WindowManager
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -44,6 +47,7 @@ class CastPlayActivity : Activity() {
     private var stepping = false
     private var lastStep = 0L
     private var pausedByUser = false
+    private var screenLock: PowerManager.WakeLock? = null
     private val hideHint = Runnable { hint?.visibility = View.GONE }
 
     private val playback = object : CastServer.Playback {
@@ -67,12 +71,25 @@ class CastPlayActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         CastServer.playback = playback
         readIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        holdScreen()
+    }
+
+    override fun onStop() {
+        releaseScreen()
+        releasePlayer()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         if (CastServer.playback === playback) CastServer.playback = null
+        releaseScreen()
         releasePlayer()
         super.onDestroy()
     }
@@ -81,11 +98,6 @@ class CastPlayActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         readIntent(intent)
-    }
-
-    override fun onStop() {
-        releasePlayer()
-        super.onStop()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -215,6 +227,7 @@ class CastPlayActivity : Activity() {
             .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(http))
             .build()
         player = mp
+        mp.setWakeMode(C.WAKE_MODE_LOCAL)
         mp.setVideoSurfaceView(view)
         mp.addListener(object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -278,6 +291,28 @@ class CastPlayActivity : Activity() {
         }
         params.gravity = Gravity.CENTER
         view.layoutParams = params
+    }
+
+    private fun holdScreen() {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (screenLock == null) {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            @Suppress("DEPRECATION")
+            screenLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE,
+                "kk:cast-screen"
+            ).apply { setReferenceCounted(false) }
+        }
+        if (screenLock?.isHeld != true) screenLock?.acquire()
+    }
+
+    private fun releaseScreen() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val lock = screenLock ?: return
+        try {
+            if (lock.isHeld) lock.release()
+        } catch (_: Exception) {
+        }
     }
 
     private fun releasePlayer() {
