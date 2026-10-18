@@ -49,6 +49,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** 缓存的 SMB 图片列表（供幻灯片轮播）*/
     private var smbImageList: List<String> = emptyList()
     private var slideshowJob: Job? = null
+    private var wallpaperSource: String? = null
 
     init { loadAll() }
 
@@ -56,7 +57,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         loadDock()
         loadAllApps()
         loadWeather()
-        loadBackground()
+        val source = wallpaperSourceKey()
+        val sourceChanged = source != wallpaperSource
+        if (sourceChanged) wallpaperSource = source
+        // Home 回到前台也会走这里。来源没变就不要重载，否则会连换两张。
+        if (sourceChanged || (shouldRunSlideshow() && slideshowJob?.isActive != true)) {
+            loadBackground()
+        }
+    }
+
+    private fun wallpaperSourceKey(): String = listOf(
+        prefs.getString("background_path", "").orEmpty(),
+        prefs.getString("builtin_wallpaper", "").orEmpty(),
+        prefs.getString("smb_path", "").orEmpty(),
+        prefs.getString("smb_user", "").orEmpty(),
+        prefs.getString("smb_pass", "").orEmpty(),
+        prefs.getInt("slideshow_interval", 10).toString()
+    ).joinToString("\u0000")
+
+    private fun shouldRunSlideshow(): Boolean {
+        val saved = prefs.getString("background_path", null)
+        return saved.isNullOrBlank() || isDirectorySource(saved)
     }
 
     // ── Dock ──────────────────────────────────────────────────────────────────
@@ -110,13 +131,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         slideshowJob?.cancel()
 
-        // 先立即显示一张内置壁纸防黑屏（仅在无手动指定时）
-        if (saved.isNullOrBlank()) {
-            val quickBg = if (builtinMode == "随机SMB") getRandomBuiltinWallpaper()
-                          else getBuiltinWallpaper()
-            _backgroundPath.value = quickBg
-        }
-
         when {
             !saved.isNullOrBlank() && isDirectorySource(saved) -> {
                 if (isRemote(saved)) loadSmbSlideshow(saved, smbUser, smbPass, intervalSec.toLong())
@@ -160,7 +174,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             smbImageList = list.shuffled()
-            _backgroundPath.value = smbImageList.first()
+            showFirstIfNeeded(smbImageList)
             runSlideshowLoop(intervalSec)
         }
     }
@@ -179,7 +193,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             smbImageList = list.shuffled()
-            _backgroundPath.value = smbImageList.first()
+            showFirstIfNeeded(smbImageList)
             runSlideshowLoop(intervalSec)
         }
     }
@@ -207,7 +221,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val list = getBuiltinWallpaperList().shuffled()
         smbImageList = list
         if (list.isEmpty()) return
-        _backgroundPath.value = list.first()
+        showFirstIfNeeded(list)
         if (list.size <= 1) return
         runSlideshowLoop(intervalSec)
     }
@@ -228,6 +242,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             last = next
             _backgroundPath.value = next
+        }
+    }
+
+    /** 当前这张还在列表里就留着，避免一次加载里连换两张。 */
+    private fun showFirstIfNeeded(list: List<String>) {
+        if (list.isEmpty()) return
+        val current = _backgroundPath.value
+        if (current.isNullOrBlank() || current !in list) {
+            _backgroundPath.value = list.first()
         }
     }
 
@@ -295,10 +318,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             else -> "file:///android_asset/wallpapers/$selected"
         }
     }
-
-    /** 快速取一张随机内置壁纸（不依赖 pref，供防黑屏占位） */
-    private fun getRandomBuiltinWallpaper(): String =
-        "file:///android_asset/wallpapers/${BUILTIN_WALLPAPERS.random()}"
 
     /** 获取内置壁纸列表（供幻灯片），"随机SMB"模式由外部处理 */
     fun getBuiltinWallpaperList(): List<String> {

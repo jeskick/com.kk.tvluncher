@@ -59,6 +59,7 @@ class MainActivity : FragmentActivity() {
     private val dockHideRunnable = Runnable { hideDockWithAnim() }
     private var rowTop: View? = null
     private var dockIndex = 0
+    private var shownWallpaper: String? = null
 
     // ── 时钟更新 ──────────────────────────────────────────────────────────────
     private val clockRunnable = object : Runnable {
@@ -604,7 +605,8 @@ class MainActivity : FragmentActivity() {
         }
 
         viewModel.backgroundPath.observe(this) { path ->
-            if (path.isNullOrBlank()) return@observe
+            if (path.isNullOrBlank() || path == shownWallpaper) return@observe
+            shownWallpaper = path
             val transition = getWallpaperTransition()
             when {
                 path.startsWith("smb://") || path.startsWith("https://") -> {
