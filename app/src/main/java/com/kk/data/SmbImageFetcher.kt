@@ -15,7 +15,7 @@ object SmbImageFetcher {
      * 构建 CIFS 上下文，同时支持 SMB1 和 SMB2/3。
      * 路由器一般只支持 SMB1，电视在内网直连时无 NetBIOS 解析问题。
      */
-    private fun buildContext(user: String = "", pass: String = ""): CIFSContext {
+    private fun buildContext(user: String = "", pass: String = "", forList: Boolean = false): CIFSContext {
         val props = Properties().apply {
             // 路由器 server min protocol = SMB2
             setProperty("jcifs.smb.client.minVersion",          "SMB202")
@@ -26,10 +26,9 @@ object SmbImageFetcher {
             setProperty("jcifs.smb.client.dfs.disabled",        "true")
             // smb.conf: smb encrypt = desired（非 required），客户端不强制加密
             setProperty("jcifs.smb.client.encryptData",         "false")
-            // 超时配置（适当延长）
-            setProperty("jcifs.smb.client.responseTimeout",     "30000")
-            setProperty("jcifs.smb.client.soTimeout",           "35000")
-            setProperty("jcifs.smb.client.connTimeout",         "20000")
+            setProperty("jcifs.smb.client.responseTimeout",     if (forList) "6000" else "30000")
+            setProperty("jcifs.smb.client.soTimeout",           if (forList) "7000" else "35000")
+            setProperty("jcifs.smb.client.connTimeout",         if (forList) "4000" else "20000")
             // 不强制签名
             setProperty("jcifs.smb.client.signingEnforced",     "false")
             setProperty("jcifs.smb.client.ipcSigningEnforced",  "false")
@@ -85,9 +84,18 @@ object SmbImageFetcher {
     /** 列出共享或目录。目录在前，隐藏系统共享（IPC$ 等）。 */
     fun listEntries(dirUrl: String, user: String = "", pass: String = ""): List<SmbEntry> {
         return try {
-            val ctx = buildContext(user, pass)
+            val ctx = buildContext(user, pass, forList = true)
             val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
-            val all = SmbFile(url, ctx).listFiles() ?: return emptyList()
+            val dir = SmbFile(url, ctx)
+            if (isServerRoot(url)) {
+                val names = dir.list() ?: return emptyList()
+                return names.mapNotNull { raw ->
+                    val name = raw.trim().trimEnd('/')
+                    if (name.isBlank() || name.startsWith(".") || name.endsWith("$")) return@mapNotNull null
+                    SmbEntry(name, url + name + "/", true)
+                }.sortedBy { it.name.lowercase() }
+            }
+            val all = dir.listFiles() ?: return emptyList()
             all.mapNotNull { file ->
                 try {
                     val name = file.name.trimEnd('/').substringAfterLast('/')
@@ -104,6 +112,11 @@ object SmbImageFetcher {
             Log.w("SmbImageFetcher", "listEntries $dirUrl: ${e.message}")
             emptyList()
         }
+    }
+
+    private fun isServerRoot(url: String): Boolean {
+        val rest = url.removePrefix("smb://").trim('/')
+        return rest.isNotEmpty() && !rest.contains('/')
     }
 
     fun isImageName(name: String): Boolean {

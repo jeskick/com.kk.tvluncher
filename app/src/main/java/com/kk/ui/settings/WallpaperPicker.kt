@@ -96,11 +96,9 @@ object WallpaperPicker {
             progress.visibility = View.VISIBLE
             status.text = "正在打开 $location"
             activity.lifecycleScope.launch {
-                val children = withContext(Dispatchers.IO) {
-                    withTimeoutOrNull(12_000) {
-                        WallpaperBrowser.children(location, user, pass)
-                    }.orEmpty()
-                }
+                val children = withTimeoutOrNull(15_000) {
+                    WallpaperBrowser.children(location, user, pass)
+                }.orEmpty()
                 if (!alive || stack.lastOrNull() != location) return@launch
                 progress.visibility = View.GONE
                 status.text = if (children.isEmpty()) "这个目录里没有图片或子目录" else location
@@ -136,7 +134,7 @@ object WallpaperPicker {
             val hosts = SmbScanner.scan(activity)
             val shares = hosts.map { host ->
                 async(Dispatchers.IO) {
-                    withTimeoutOrNull(8_000) { WallpaperBrowser.listShares(host, user, pass) }.orEmpty()
+                    withTimeoutOrNull(15_000) { WallpaperBrowser.listShares(host, user, pass) }.orEmpty()
                 }
             }.awaitAll().flatten()
             if (!alive) return@launch

@@ -6,6 +6,10 @@ import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.MediaStore
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 /** 本机目录和局域网共享，供壁纸选择。 */
 object WallpaperBrowser {
@@ -51,15 +55,17 @@ object WallpaperBrowser {
         return items.sortedBy { it.label.lowercase() }
     }
 
-    fun listShares(host: String, user: String, pass: String): List<Item> {
-        return SmbImageFetcher.listEntries("smb://$host/", user, pass)
-            .filter { it.directory }
-            .map { Item(it.name, host, it.url, true) }
+    suspend fun listShares(host: String, user: String, pass: String): List<Item> {
+        val entries = smbEntries("smb://$host/", user, pass).filter { it.directory }
+        if (entries.isNotEmpty()) {
+            return entries.map { Item(it.name, host, it.url, true) }
+        }
+        return listOf(Item("电脑 $host", "共享未能列出", "smb://$host/", true))
     }
 
-    fun children(location: String, user: String, pass: String): List<Item> {
+    suspend fun children(location: String, user: String, pass: String): List<Item> {
         if (location.startsWith("smb://")) {
-            return SmbImageFetcher.listEntries(location, user, pass).map {
+            return smbEntries(location, user, pass).map {
                 Item(it.name, if (it.directory) "目录" else "图片", it.url, it.directory)
             }
         }
@@ -71,6 +77,18 @@ object WallpaperBrowser {
             Item(file.name, if (dir) "目录" else "图片", file.absolutePath, dir)
         }.sortedWith(compareBy({ !it.directory }, { it.label.lowercase() }))
     }
+
+    /** 路由器账号和 Windows 来宾同时试。来宾可以读 Everyone 共享。 */
+    private suspend fun smbEntries(location: String, user: String, pass: String): List<SmbImageFetcher.SmbEntry> =
+        coroutineScope {
+            val tries = mutableListOf<Pair<String, String>>()
+            if (user.isNotBlank()) tries += user to pass
+            if (tries.none { it.first.equals("Guest", true) }) tries += "Guest" to ""
+            if (user.isBlank()) tries += "" to ""
+            tries.map { (account, password) ->
+                async(Dispatchers.IO) { SmbImageFetcher.listEntries(location, account, password) }
+            }.awaitAll().firstOrNull { it.isNotEmpty() } ?: emptyList()
+        }
 
     private fun volumeLabel(context: Context, file: File): String {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
