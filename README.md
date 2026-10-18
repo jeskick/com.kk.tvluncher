@@ -64,7 +64,10 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 |------|------|
 | 按一次 HOME | 切换下一张壁纸 |
 | 短时间内再按一次 HOME | 显示 Dock |
-| Dock 上按确定 | 打开该应用 |
+| 设置、WiFi 按下 | 到天气 |
+| 天气按上 | 回到刚才的设置或 WiFi |
+| 天气按下 | 到 Dock，Dock 会显示出来 |
+| Dock 上任意图标按上 | 回到天气 |
 | Dock 最右侧加号按下 | 打开全部应用 |
 | 左右到 Dock 两端 | 从另一端继续 |
 | 天气卡片获得焦点 | 展开预报 |

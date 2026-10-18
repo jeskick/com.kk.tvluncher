@@ -57,6 +57,8 @@ class MainActivity : FragmentActivity() {
     private var isDockVisible = false
     private var dockAutoHideSeconds = 10          // 默认 10 秒，0 = 禁用
     private val dockHideRunnable = Runnable { hideDockWithAnim() }
+    private var rowTop: View? = null
+    private var dockIndex = 0
 
     // ── 时钟更新 ──────────────────────────────────────────────────────────────
     private val clockRunnable = object : Runnable {
@@ -135,9 +137,8 @@ class MainActivity : FragmentActivity() {
         lastHomeTimestamp = now
 
         if (gap in 1..homeSwitchDelayMs) {
-            // 连按：取消"切壁纸"，改为显示 Dock
             mainHandler.removeCallbacks(homePendingSwitch)
-            resetDockHideTimer()
+            revealDock(focusFirst = true)
         } else {
             // 单按：延迟执行"切壁纸"，给第二下 HOME 留 320ms 的判定窗口
             mainHandler.removeCallbacks(homePendingSwitch)
@@ -173,21 +174,6 @@ class MainActivity : FragmentActivity() {
         binding.btnSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        binding.btnSettings.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    binding.btnWifi.requestFocus()
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP -> true
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    binding.weatherCard.requestFocus()
-                    true
-                }
-                else -> false
-            }
-        }
         binding.btnSettings.setOnFocusChangeListener { _, hasFocus ->
             binding.tvSettingsLabel.visibility = if (hasFocus) View.VISIBLE else View.GONE
             binding.tvSettingsLabel.text = if (hasFocus) "设置" else ""
@@ -199,21 +185,6 @@ class MainActivity : FragmentActivity() {
 
         binding.btnWifi.setOnClickListener {
             startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
-        }
-        binding.btnWifi.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    binding.btnSettings.requestFocus()
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP -> true
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    binding.weatherCard.requestFocus()
-                    true
-                }
-                else -> false
-            }
         }
         binding.btnWifi.setOnFocusChangeListener { _, hasFocus ->
             val ssid = binding.btnWifi.tag as? String ?: ""
@@ -275,25 +246,6 @@ class MainActivity : FragmentActivity() {
         binding.weatherCard.setOnClickListener {
             if (isWeatherExpanded) collapseWeather() else expandWeather()
         }
-        binding.weatherCard.setOnKeyListener { _, keyCode, event ->
-            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (isAppDrawerVisible) return@setOnKeyListener false
-                    if (!isDockVisible) showDockWithAnim()
-                    binding.rvDock.post {
-                        binding.rvDock.layoutManager?.findViewByPosition(0)?.requestFocus()
-                    }
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    binding.btnSettings.requestFocus()
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> true
-                else -> false
-            }
-        }
     }
 
     private fun expandWeather() {
@@ -351,30 +303,38 @@ class MainActivity : FragmentActivity() {
 
     // ── Dock 自动隐藏 ──────────────────────────────────────────────────────────
 
-    private fun resetDockHideTimer() {
+    private fun revealDock(focusFirst: Boolean) {
         mainHandler.removeCallbacks(dockHideRunnable)
-        if (!isDockVisible) showDockWithAnim()
+        showDockWithAnim(takeFocus = focusFirst)
         if (dockAutoHideSeconds > 0)
             mainHandler.postDelayed(dockHideRunnable, dockAutoHideSeconds * 1000L)
     }
 
-    private fun showDockWithAnim() {
-        if (isDockVisible) return
+    private fun showDockWithAnim(takeFocus: Boolean = false) {
+        if (isDockVisible) {
+            if (takeFocus) focusDockItem(0)
+            return
+        }
         isDockVisible = true
         binding.llDockContainer.visibility = View.VISIBLE
         binding.llDockContainer.translationY = binding.llDockContainer.height.toFloat()
         binding.llDockContainer.animate()
             .translationY(0f).alpha(1f).setDuration(260)
             .setInterpolator(DecelerateInterpolator())
-            .withEndAction {
-                // Dock 滑入后自动把焦点放到第一个 App，避免系统把焦点
-                // 错误地放到屏幕外的最右侧项上，导致需要按右键才能看到高亮
-                binding.rvDock.post {
-                    val first = binding.rvDock.layoutManager?.findViewByPosition(0)
-                    first?.requestFocus()
-                }
-            }
+            .withEndAction { if (takeFocus) focusDockItem(0) }
             .start()
+    }
+
+    private fun focusDockItem(index: Int) {
+        val rv = binding.rvDock
+        val safe = index.coerceAtLeast(0)
+        val shown = rv.layoutManager?.findViewByPosition(safe)
+        if (shown != null) {
+            shown.requestFocus()
+            return
+        }
+        rv.scrollToPosition(safe)
+        rv.post { rv.layoutManager?.findViewByPosition(safe)?.requestFocus() }
     }
 
     private fun hideDockWithAnim() {
@@ -452,8 +412,10 @@ class MainActivity : FragmentActivity() {
                 isDockVisible = true
                 binding.llDockContainer.translationY = 0f
                 binding.llDockContainer.animate().alpha(1f).setDuration(200).start()
-                binding.rvDock.requestFocus()
-                resetDockHideTimer()
+                focusDockItem(dockIndex)
+                mainHandler.removeCallbacks(dockHideRunnable)
+                if (dockAutoHideSeconds > 0)
+                    mainHandler.postDelayed(dockHideRunnable, dockAutoHideSeconds * 1000L)
             }.start()
     }
 
@@ -475,23 +437,109 @@ class MainActivity : FragmentActivity() {
             KeyDecision.SYSTEM -> return super.dispatchKeyEvent(event)
             KeyDecision.UI -> Unit
         }
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && handleThreeRows(event.keyCode)) {
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
-            // Dock 不可见时的"唤出"：直接显示 Dock 并吃掉这个按键，
-            // 避免该按键被系统继续用于焦点搜索（否则焦点会被冲到屏幕边缘外）。
+            val direction = event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
             val wakingUpDock = !isDockVisible && !isAppDrawerVisible &&
-                               event.keyCode != KeyEvent.KEYCODE_BACK
+                event.keyCode != KeyEvent.KEYCODE_BACK && !direction
             if (wakingUpDock) {
-                resetDockHideTimer()
+                revealDock(focusFirst = true)
                 return true
             }
-            resetDockHideTimer()
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_BACK -> {
-                    if (isAppDrawerVisible) { hideAppDrawer(); return true }
-                }
+            if (isDockVisible) {
+                mainHandler.removeCallbacks(dockHideRunnable)
+                if (dockAutoHideSeconds > 0)
+                    mainHandler.postDelayed(dockHideRunnable, dockAutoHideSeconds * 1000L)
+            }
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && isAppDrawerVisible) {
+                hideAppDrawer()
+                return true
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /** 桌面只有三行：设置/WiFi、天气、Dock。左右只在同一行里走，上下换行。 */
+    private fun handleThreeRows(keyCode: Int): Boolean {
+        if (isAppDrawerVisible) return false
+        val vertical = keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+        val horizontal = keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        if (!vertical && !horizontal) return false
+        val focus = currentFocus
+        val onSettings = under(focus, binding.btnSettings)
+        val onWifi = under(focus, binding.btnWifi)
+        val onWeather = under(focus, binding.weatherCard)
+        val onDock = under(focus, binding.llDockContainer)
+        if (onSettings) rowTop = binding.btnSettings
+        if (onWifi) rowTop = binding.btnWifi
+        if (onDock && focus != null) dockIndex = dockIndexOf(focus)
+        if (!onSettings && !onWifi && !onWeather && !onDock) {
+            binding.btnSettings.requestFocus()
+            return true
+        }
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> when {
+                onWifi -> { binding.btnSettings.requestFocus(); true }
+                onSettings || onWeather -> true
+                else -> false
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> when {
+                onSettings -> { binding.btnWifi.requestFocus(); true }
+                onWifi || onWeather -> true
+                else -> false
+            }
+            KeyEvent.KEYCODE_DPAD_UP -> when {
+                onSettings || onWifi -> true
+                onWeather -> { (rowTop ?: binding.btnSettings).requestFocus(); true }
+                onDock -> { binding.weatherCard.requestFocus(); true }
+                else -> false
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> when {
+                onSettings || onWifi -> { binding.weatherCard.requestFocus(); true }
+                onWeather -> { openDockRow(); true }
+                onDock -> {
+                    if (::dockAdapter.isInitialized && dockAdapter.itemCount > 0 &&
+                        dockIndex == dockAdapter.itemCount - 1
+                    ) showAppDrawer()
+                    true
+                }
+                else -> false
+            }
+            else -> false
+        }
+    }
+
+    private fun under(focus: View?, ancestor: View): Boolean {
+        var node = focus
+        while (node != null) {
+            if (node === ancestor) return true
+            node = node.parent as? View
+        }
+        return false
+    }
+
+    private fun dockIndexOf(focus: View): Int {
+        var node: View? = focus
+        while (node != null && node !== binding.rvDock) {
+            val pos = binding.rvDock.getChildAdapterPosition(node)
+            if (pos != RecyclerView.NO_POSITION) return pos
+            node = node.parent as? View
+        }
+        return dockIndex
+    }
+
+    private fun openDockRow() {
+        val index = dockIndex.coerceAtLeast(0)
+        if (!isDockVisible) showDockWithAnim(takeFocus = false)
+        binding.rvDock.post { focusDockItem(index) }
+        mainHandler.removeCallbacks(dockHideRunnable)
+        if (dockAutoHideSeconds > 0)
+            mainHandler.postDelayed(dockHideRunnable, dockAutoHideSeconds * 1000L)
     }
 
     // ── ViewModel 观察 ────────────────────────────────────────────────────────
