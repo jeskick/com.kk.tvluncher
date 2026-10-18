@@ -253,8 +253,12 @@ class LockInputGuard(
                 return KeyDecision.CONSUME
             }
             DesktopLock.Feed.PREFIX -> {
-                swallowUp = true
-                return KeyDecision.CONSUME
+                // 未锁定时方向键仍要移动焦点。默认密码以「下」开头，这里若吃掉按键，第一行就下不去。
+                if (locked) {
+                    swallowUp = true
+                    return KeyDecision.CONSUME
+                }
+                return KeyDecision.UI
             }
             DesktopLock.Feed.IGNORED -> {
                 if (locked) {
