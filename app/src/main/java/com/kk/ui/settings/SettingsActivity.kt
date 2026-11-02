@@ -32,6 +32,7 @@ import com.kk.tvlauncher.databinding.ActivitySettingsBinding
 import com.kk.tvlauncher.ui.MainViewModel
 import com.kk.tvlauncher.ui.lock.DesktopLock
 import com.kk.tvlauncher.ui.lock.KeyDecision
+import com.kk.tvlauncher.ui.lock.LockAccessibilityService
 import com.kk.tvlauncher.ui.lock.LockInputGuard
 import kotlinx.coroutines.launch
 
@@ -91,6 +92,7 @@ class SettingsActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         lockGuard.start()
+        refreshLockGuard()
     }
 
     override fun onPause() {
@@ -177,6 +179,24 @@ class SettingsActivity : FragmentActivity() {
         binding.btnLockEndMinus.setOnClickListener { shiftLockTime(start = false, delta = -60) }
         binding.btnLockEndPlus.setOnClickListener { shiftLockTime(start = false, delta = 60) }
         binding.btnSetLockPassword.setOnClickListener { showPasswordRecorder() }
+        binding.btnLockGuard.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "打不开系统辅助功能", Toast.LENGTH_SHORT).show()
+            }
+        }
+        refreshLockGuard()
+    }
+
+    private fun refreshLockGuard() {
+        val on = LockAccessibilityService.isEnabled(this)
+        binding.tvLockGuard.text = if (on) {
+            "系统拦截已开启。锁屏后设置键和其它应用都会回到这个桌面。"
+        } else {
+            "系统拦截未开启。现在锁屏只能拦住桌面上的按键。"
+        }
+        binding.btnLockGuard.text = if (on) "查看系统拦截" else "开启系统拦截"
     }
 
     private fun shiftLockTime(start: Boolean, delta: Int) {

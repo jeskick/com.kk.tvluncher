@@ -2,6 +2,7 @@ package com.kk.tvlauncher.ui.lock
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
@@ -25,6 +26,7 @@ object DesktopLock {
     const val KEY_END = "lock_end_min"
     const val KEY_LOCKED = "desktop_locked"
     const val KEY_WINDOW = "lock_window_inside"
+    const val ACTION_LOCK_CHANGED = "com.kk.tvlauncher.action.LOCK_CHANGED"
 
     const val DEFAULT_START = 22 * 60
     const val DEFAULT_END = 7 * 60
@@ -110,13 +112,19 @@ object DesktopLock {
             .putBoolean(KEY_WINDOW, inside)
             .putBoolean(KEY_LOCKED, inside)
             .apply()
+        notifyGuard(context)
         return inside
     }
 
     fun toggle(context: Context): Boolean {
         val next = !isLocked(context)
         prefs(context).edit().putBoolean(KEY_LOCKED, next).apply()
+        notifyGuard(context)
         return next
+    }
+
+    private fun notifyGuard(context: Context) {
+        context.sendBroadcast(Intent(ACTION_LOCK_CHANGED).setPackage(context.packageName))
     }
 
     enum class Feed { MATCHED, PREFIX, IGNORED }

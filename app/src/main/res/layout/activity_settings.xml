@@ -786,6 +786,36 @@
                     android:textColor="@color/text_hint"
                     android:textSize="12sp"
                     android:layout_marginTop="10dp" />
+
+                <TextView
+                    android:id="@+id/tvLockGuard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="系统拦截未开启"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/btnLockGuard"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="开启系统拦截"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:background="@drawable/bg_btn_accent"
+                    android:focusable="true"
+                    android:clickable="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="设置键由系统先收走，桌面锁收不到。开启系统拦截后，锁屏时设置键不再打开系统设置，其它应用一出现就会被拉回桌面。未锁定时不拦截。需要先在系统辅助功能里启用「桌面锁定」，只开这一次。"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <!-- ⑥────────────────── 系统 ─────────────────────────── -->
