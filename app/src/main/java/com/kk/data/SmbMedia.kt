@@ -1,5 +1,7 @@
 package com.kk.tvlauncher.data
 
+import android.util.Log
+import jcifs.CIFSContext
 import jcifs.config.PropertyConfiguration
 import jcifs.context.BaseContext
 import jcifs.smb.NtlmPasswordAuthenticator
@@ -20,6 +22,7 @@ object SmbMedia {
     private val VIDEO = setOf("mp4", "mkv", "avi", "mov", "m4v", "webm", "ts", "flv", "wmv", "mpg", "mpeg")
     private val SUBTITLE = setOf("srt", "ass", "ssa", "vtt")
     private val accountByHost = ConcurrentHashMap<String, Pair<String, String>>()
+    private val sessions = ConcurrentHashMap<SmbRandomAccessFile, CIFSContext>()
     @PublishedApi
     internal val gate = Any()
 
@@ -30,31 +33,50 @@ object SmbMedia {
     fun list(dirUrl: String, user: String, pass: String): List<Entry>? = exclusive {
         val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
         var blank: List<Entry>? = null
+        var last: Exception? = null
         for ((account, password) in accounts(hostOf(url), user, pass)) {
-            val found = runCatching { listWith(url, account, password) }.getOrNull() ?: continue
-            if (found.isNotEmpty()) {
-                accountByHost[hostOf(url)] = account to password
-                return found
+            try {
+                val found = listWith(url, account, password)
+                if (found.isNotEmpty()) {
+                    accountByHost[hostOf(url)] = account to password
+                    return found
+                }
+                blank = found
+            } catch (e: Exception) {
+                if (e is java.util.concurrent.CancellationException || e is InterruptedException) throw e
+                last = e
+                Log.w(TAG, "list $url ${e.javaClass.simpleName}: ${e.message}")
             }
-            blank = found
         }
+        if (blank == null && last != null) Log.w(TAG, "list failed $url ${last.javaClass.simpleName}: ${last.message}")
         blank
     }
 
     fun open(fileUrl: String, user: String, pass: String): SmbRandomAccessFile = exclusive {
         var last: Exception? = null
         for ((account, password) in accounts(hostOf(fileUrl), user, pass)) {
+            val ctx = context(account, password)
             try {
-                val file = SmbFile(fileUrl, context(account, password))
+                val file = SmbFile(fileUrl, ctx)
                 val raf = SmbRandomAccessFile(file, "r")
                 raf.length()
+                sessions[raf] = ctx
                 accountByHost[hostOf(fileUrl)] = account to password
                 return raf
             } catch (e: Exception) {
+                runCatching { ctx.close() }
                 last = e
             }
         }
         throw IOException(last?.message ?: "打不开共享文件")
+    }
+
+    /** 关掉文件，并释放这条共享连接。统计和列目录用完必须关，否则电视上很快就进不了目录。 */
+    fun close(file: SmbRandomAccessFile) {
+        exclusive {
+            runCatching { file.close() }
+            sessions.remove(file)?.let { runCatching { it.close() } }
+        }
     }
 
     fun parent(url: String): String {
@@ -74,8 +96,14 @@ object SmbMedia {
     fun fileSize(fileUrl: String, user: String, pass: String): Long = exclusive {
         val url = fileUrl.trimEnd('/')
         for ((account, password) in accounts(hostOf(url), user, pass)) {
-            val size = runCatching { SmbFile(url, context(account, password)).length() }.getOrDefault(-1L)
-            if (size >= 0) return size
+            val ctx = context(account, password)
+            try {
+                val size = SmbFile(url, ctx).length()
+                if (size >= 0) return size
+            } catch (_: Exception) {
+            } finally {
+                runCatching { ctx.close() }
+            }
         }
         -1L
     }
@@ -103,27 +131,32 @@ object SmbMedia {
     }
 
     private fun listWith(url: String, user: String, pass: String): List<Entry> {
-        val dir = SmbFile(url, context(user, pass))
-        val names = dir.list() ?: return emptyList()
-        val server = isServerRoot(url)
-        return names.mapNotNull { raw ->
-            val name = raw.trim().trim('/')
-            if (name.isBlank() || name.startsWith(".") || name.endsWith("$")) return@mapNotNull null
-            val kind = when {
-                server -> Kind.DIRECTORY
-                ext(name) in IMAGE -> Kind.IMAGE
-                ext(name) in VIDEO -> Kind.VIDEO
-                ext(name) in SUBTITLE -> Kind.SUBTITLE
-                else -> if (isDirectory(url, name, user, pass)) Kind.DIRECTORY else return@mapNotNull null
-            }
-            val full = url.trimEnd('/') + "/" + name + if (kind == Kind.DIRECTORY) "/" else ""
-            Entry(name, full, kind)
-        }.sortedWith(compareBy({ it.kind != Kind.DIRECTORY }, { it.name.lowercase() }))
+        val ctx = context(user, pass)
+        try {
+            val dir = SmbFile(url, ctx)
+            val names = dir.list() ?: return emptyList()
+            val server = isServerRoot(url)
+            return names.mapNotNull { raw ->
+                val name = raw.trim().trim('/')
+                if (name.isBlank() || name.startsWith(".") || name.endsWith("$")) return@mapNotNull null
+                val kind = when {
+                    server -> Kind.DIRECTORY
+                    ext(name) in IMAGE -> Kind.IMAGE
+                    ext(name) in VIDEO -> Kind.VIDEO
+                    ext(name) in SUBTITLE -> Kind.SUBTITLE
+                    else -> if (isDirectory(ctx, url, name)) Kind.DIRECTORY else return@mapNotNull null
+                }
+                val full = url.trimEnd('/') + "/" + name + if (kind == Kind.DIRECTORY) "/" else ""
+                Entry(name, full, kind)
+            }.sortedWith(compareBy({ it.kind != Kind.DIRECTORY }, { it.name.lowercase() }))
+        } finally {
+            runCatching { ctx.close() }
+        }
     }
 
-    private fun isDirectory(parent: String, name: String, user: String, pass: String): Boolean {
+    private fun isDirectory(ctx: CIFSContext, parent: String, name: String): Boolean {
         return try {
-            SmbFile(parent + name, context(user, pass)).isDirectory
+            SmbFile(parent + name, ctx).isDirectory
         } catch (_: Exception) {
             false
         }
@@ -157,13 +190,12 @@ object SmbMedia {
         setProperty("jcifs.smb.client.responseTimeout", "20000")
         setProperty("jcifs.smb.client.soTimeout", "20000")
         setProperty("jcifs.smb.client.connTimeout", "8000")
-        setProperty("jcifs.smb.client.tcpNoDelay", "true")
-        setProperty("jcifs.smb.client.rcv_buf_size", "1048576")
-        setProperty("jcifs.smb.client.snd_buf_size", "1048576")
         setProperty("jcifs.smb.client.signingEnforced", "false")
         setProperty("jcifs.smb.client.ipcSigningEnforced", "false")
     })).let { base ->
         if (user.isNotBlank()) base.withCredentials(NtlmPasswordAuthenticator("", user, pass))
         else base.withCredentials(NtlmPasswordAuthenticator("", "", ""))
     }
+
+    private const val TAG = "SmbMedia"
 }

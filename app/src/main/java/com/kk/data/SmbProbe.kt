@@ -9,6 +9,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.extractor.DefaultExtractorInput
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.Extractor
+import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.PositionHolder
 import androidx.media3.extractor.SeekMap
@@ -39,7 +40,14 @@ object SmbProbe {
             var position = 0L
             var remaining = dataSource.open(DataSpec.Builder().setUri(uri).setPosition(0).build())
             var input = DefaultExtractorInput(dataSource, position, remaining)
-            val extractors = DefaultExtractorsFactory().createExtractors(uri, emptyMap())
+            val extractors = DefaultExtractorsFactory().createExtractors(uri, emptyMap()).map { candidate ->
+                if (candidate is MatroskaExtractor) {
+                    candidate.release()
+                    MatroskaExtractor(MatroskaExtractor.FLAG_DISABLE_SEEK_FOR_CUES)
+                } else {
+                    candidate
+                }
+            }
             var found: Extractor? = null
             for (candidate in extractors) {
                 if (found != null) {
@@ -139,7 +147,7 @@ object SmbProbe {
             val size = decodeImage(buf, off) ?: return null
             return "${size.first}×${size.second}"
         } finally {
-            runCatching { raf.close() }
+            runCatching { SmbMedia.close(raf) }
         }
     }
 

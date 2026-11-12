@@ -26,7 +26,8 @@ class SmbDataSource(
 
     override fun open(dataSpec: DataSpec): Long = SmbMedia.exclusive {
         transferInitializing(dataSpec)
-        file?.close()
+        file?.let { SmbMedia.close(it) }
+        file = null
         aheadPos = 0
         aheadLen = 0
         val raf = try {
@@ -78,10 +79,7 @@ class SmbDataSource(
     override fun close() {
         uri = null
         remaining = 0L
-        try {
-            file?.close()
-        } catch (_: Exception) {
-        }
+        file?.let { SmbMedia.close(it) }
         file = null
         if (started) {
             started = false

@@ -173,7 +173,12 @@ class LanLibraryActivity : FragmentActivity() {
             opening = false
             binding.scanProgress.visibility = View.GONE
             if (children == null) {
-                stack.removeLast()
+                if (stack.isNotEmpty()) stack.removeLast()
+                val parent = stack.lastOrNull()
+                if (parent == null) show(rootItems, null)
+                else cache[parent]?.let { saved ->
+                    show(saved.filter { entry -> entry.kind != SmbMedia.Kind.SUBTITLE }, parent)
+                }
                 binding.tvStatus.visibility = View.VISIBLE
                 binding.tvStatus.text = "这个目录暂时打不开"
                 return@launch
@@ -258,7 +263,7 @@ class LanLibraryActivity : FragmentActivity() {
                 renderSummary(folders, state[0], state[1], size[0], ready = false)
             }
         }
-        if (token != statsToken) return
+        if (token != statsToken || hinted != null) return
         val real = withContext(Dispatchers.IO) {
             withTimeoutOrNull(8_000) { SmbProbe.resolution(item, user, pass) }
         }
