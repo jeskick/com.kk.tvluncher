@@ -26,12 +26,15 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import com.kk.tvlauncher.data.SmbDataSource
+import com.kk.tvlauncher.data.PlaybackSource
 import com.kk.tvlauncher.data.SmbMedia
 import com.kk.tvlauncher.ui.lock.KeyDecision
 import com.kk.tvlauncher.ui.lock.LockInputGuard
@@ -46,8 +49,11 @@ class LanPlayActivity : Activity() {
     private var picture: ImageView? = null
     private var surface: SurfaceView? = null
     private var info: TextView? = null
+    private var cues: TextView? = null
     private var timeBar: TimeBar? = null
     private var audioDropped = false
+    private var wantedSubtitle: String? = null
+    private var subtitlePicked = false
     private var fileBytes = -1L
     private val images = LinkedHashMap<String, ByteArray>()
     private val hideInfo = Runnable { info?.visibility = View.GONE }
@@ -71,10 +77,15 @@ class LanPlayActivity : Activity() {
             setPadding(dp(28), dp(24), dp(28), 0)
             visibility = View.GONE
         }
+        cues = label(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 22f).apply {
+            setPadding(dp(48), 0, dp(48), dp(96))
+            visibility = View.GONE
+        }
         timeBar = TimeBar(this)
         root.addView(surface, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(picture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(info, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        root.addView(cues, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         root.addView(
             timeBar,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(72), Gravity.BOTTOM)
@@ -143,8 +154,12 @@ class LanPlayActivity : Activity() {
             return
         }
         fileBytes = -1L
+        wantedSubtitle = null
+        subtitlePicked = false
         info?.text = ""
         info?.visibility = View.GONE
+        cues?.text = ""
+        cues?.visibility = View.GONE
         releasePlayer()
         if (item.kind == SmbMedia.Kind.IMAGE) {
             surface?.visibility = View.GONE
@@ -159,7 +174,13 @@ class LanPlayActivity : Activity() {
         timeBar?.setTimes(0L, C.TIME_UNSET)
         audioDropped = false
         reveal()
-        startVideo(item, loadSubtitles(item))
+        Thread {
+            val prepared = prepareSubtitles(item)
+            runOnUiThread {
+                if (current()?.url != item.url) return@runOnUiThread
+                startVideo(item, prepared.first, prepared.second)
+            }
+        }.start()
         Thread {
             val size = runCatching {
                 SmbMedia.fileSize(item.url, LanPlayRequest.user, LanPlayRequest.pass)
@@ -219,13 +240,18 @@ class LanPlayActivity : Activity() {
         }
     }
 
-    private fun startVideo(item: SmbMedia.Entry, subs: List<MediaItem.SubtitleConfiguration>) {
+    private fun startVideo(
+        item: SmbMedia.Entry,
+        subs: List<MediaItem.SubtitleConfiguration>,
+        memory: Map<String, ByteArray>
+    ) {
         if (current()?.url != item.url) return
+        wantedSubtitle = subs.firstOrNull()?.label
         val builder = MediaItem.Builder()
             .setUri(item.url)
             .setSubtitleConfigurations(subs)
         mimeOf(item.name)?.let { builder.setMimeType(it) }
-        val dataSource = SmbDataSource.Factory(LanPlayRequest.user, LanPlayRequest.pass)
+        val dataSource = PlaybackSource.Factory(LanPlayRequest.user, LanPlayRequest.pass, memory)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(20_000, 60_000, 8_000, 12_000)
             .setTargetBufferBytes(48 * 1024 * 1024)
@@ -256,6 +282,28 @@ class LanPlayActivity : Activity() {
                 exo.seekTo(position)
                 exo.play()
             }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                if (subtitlePicked) return
+                val label = wantedSubtitle ?: return
+                for (group in tracks.groups) {
+                    if (group.type != C.TRACK_TYPE_TEXT) continue
+                    for (index in 0 until group.length) {
+                        if (group.getTrackFormat(index).label != label) continue
+                        subtitlePicked = true
+                        exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
+                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+                            .build()
+                        return
+                    }
+                }
+            }
+
+            override fun onCues(cueGroup: CueGroup) {
+                val text = cueGroup.cues.mapNotNull { it.text }.joinToString("\n")
+                cues?.text = text
+                cues?.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
+            }
         })
         exo.prepare()
         exo.play()
@@ -281,16 +329,67 @@ class LanPlayActivity : Activity() {
         else -> null
     }
 
-    private fun loadSubtitles(video: SmbMedia.Entry): List<MediaItem.SubtitleConfiguration> {
-        val siblings = LanPlayRequest.folder
-        return SmbMedia.subtitlesFor(video, siblings).mapIndexed { index, sub ->
-            MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.url))
-                .setMimeType(subtitleMime(sub.name))
+    private fun prepareSubtitles(
+        video: SmbMedia.Entry
+    ): Pair<List<MediaItem.SubtitleConfiguration>, Map<String, ByteArray>> {
+        var siblings = LanPlayRequest.folder
+        if (SmbMedia.subtitlesFor(video, siblings).isEmpty()) {
+            val fresh = runCatching {
+                SmbMedia.list(SmbMedia.parent(video.url), LanPlayRequest.user, LanPlayRequest.pass).orEmpty()
+            }.getOrDefault(emptyList())
+            if (fresh.isNotEmpty()) siblings = fresh
+        }
+        val configs = ArrayList<MediaItem.SubtitleConfiguration>()
+        val memory = HashMap<String, ByteArray>()
+        SmbMedia.subtitlesFor(video, siblings).forEachIndexed { index, sub ->
+            val raw = SmbMedia.readAll(sub.url, LanPlayRequest.user, LanPlayRequest.pass, 8 * 1024 * 1024)
+                ?: return@forEachIndexed
+            val ext = sub.name.substringAfterLast('.', "").lowercase()
+            val text = if (ext == "ass" || ext == "ssa") assToSrt(String(raw, Charsets.UTF_8)) else null
+            val payload = text?.toByteArray(Charsets.UTF_8) ?: raw
+            if (payload.isEmpty()) return@forEachIndexed
+            val mime = if (text == null && ext == "vtt") MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP
+            val uri = Uri.parse("mem://subtitle/$index")
+            memory[uri.toString()] = payload
+            configs += MediaItem.SubtitleConfiguration.Builder(uri)
+                .setMimeType(mime)
                 .setLabel(sub.name)
                 .setLanguage("zh")
                 .setSelectionFlags(if (index == 0) C.SELECTION_FLAG_DEFAULT else 0)
                 .build()
         }
+        return configs to memory
+    }
+
+    private fun assToSrt(source: String): String {
+        val out = StringBuilder()
+        var index = 1
+        for (raw in source.split('\n', '\r')) {
+            val line = raw.trim().removePrefix("\uFEFF")
+            if (!line.startsWith("Dialogue:", true)) continue
+            val parts = line.substringAfter(':').trim().split(',', limit = 10)
+            if (parts.size < 10) continue
+            val start = srtTime(parts[1].trim()) ?: continue
+            val end = srtTime(parts[2].trim()) ?: continue
+            val cue = parts[9]
+                .replace(Regex("\\{[^}]*}"), "")
+                .replace("\\N", "\n", true)
+                .replace("\\n", "\n", true)
+                .replace("\\h", " ", true)
+                .trim()
+            if (cue.isBlank()) continue
+            out.append(index++).append('\n')
+            out.append(start).append(" --> ").append(end).append('\n')
+            out.append(cue).append("\n\n")
+        }
+        return out.toString()
+    }
+
+    private fun srtTime(raw: String): String? {
+        val match = Regex("""(\d+):(\d{2}):(\d{2})[.](\d{1,3})""").find(raw) ?: return null
+        val hour = match.groupValues[1].toInt()
+        val fraction = match.groupValues[4].padEnd(3, '0').take(3)
+        return "%02d:%s:%s,%s".format(hour, match.groupValues[2], match.groupValues[3], fraction)
     }
 
     private fun toggle() {
@@ -419,11 +518,6 @@ class LanPlayActivity : Activity() {
         }
     }
 
-    private fun subtitleMime(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
-        "vtt" -> MimeTypes.TEXT_VTT
-        "ass", "ssa" -> MimeTypes.TEXT_SSA
-        else -> MimeTypes.APPLICATION_SUBRIP
-    }
 }
 
 object LanPlayRequest {

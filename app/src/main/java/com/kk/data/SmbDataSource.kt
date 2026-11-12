@@ -120,3 +120,61 @@ class SmbDataSource(
         override fun createDataSource(): DataSource = SmbDataSource(user, pass)
     }
 }
+
+/** 视频仍走共享连接；同目录字幕先读进内存，避免和正片抢一条连接。 */
+class PlaybackSource(
+    private val user: String,
+    private val pass: String,
+    private val files: Map<String, ByteArray>
+) : DataSource {
+
+    private val smb = SmbDataSource(user, pass)
+    private var memory: ByteArray? = null
+    private var memoryUri: Uri? = null
+    private var memoryPos = 0
+
+    override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
+        smb.addTransferListener(transferListener)
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        val bytes = files[dataSpec.uri.toString()]
+        if (bytes != null) {
+            memory = bytes
+            memoryUri = dataSpec.uri
+            memoryPos = dataSpec.position.toInt().coerceAtLeast(0).coerceAtMost(bytes.size)
+            return (bytes.size - memoryPos).toLong()
+        }
+        memory = null
+        memoryUri = null
+        return smb.open(dataSpec)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val bytes = memory ?: return smb.read(buffer, offset, length)
+        if (memoryPos >= bytes.size) return C.RESULT_END_OF_INPUT
+        val n = minOf(length, bytes.size - memoryPos)
+        System.arraycopy(bytes, memoryPos, buffer, offset, n)
+        memoryPos += n
+        return n
+    }
+
+    override fun getUri(): Uri? = if (memory != null) memoryUri else smb.getUri()
+
+    override fun close() {
+        if (memory != null) {
+            memory = null
+            memoryUri = null
+            return
+        }
+        smb.close()
+    }
+
+    class Factory(
+        private val user: String,
+        private val pass: String,
+        private val files: Map<String, ByteArray>
+    ) : DataSource.Factory {
+        override fun createDataSource(): DataSource = PlaybackSource(user, pass, files)
+    }
+}
