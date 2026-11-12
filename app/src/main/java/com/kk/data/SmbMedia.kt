@@ -20,20 +20,28 @@ object SmbMedia {
     private val VIDEO = setOf("mp4", "mkv", "avi", "mov", "m4v", "webm", "ts", "flv", "wmv", "mpg", "mpeg")
     private val SUBTITLE = setOf("srt", "ass", "ssa", "vtt")
     private val accountByHost = ConcurrentHashMap<String, Pair<String, String>>()
+    @PublishedApi
+    internal val gate = Any()
 
-    fun list(dirUrl: String, user: String, pass: String): List<Entry> {
+    /** 同一时间只走一条共享连接，避免统计和播放抢连接把目录列空。 */
+    inline fun <T> exclusive(block: () -> T): T = synchronized(gate) { block() }
+
+    /** 列得出来返回列表，连接失败返回 null。空列表表示目录确实是空的。 */
+    fun list(dirUrl: String, user: String, pass: String): List<Entry>? = exclusive {
         val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
+        var blank: List<Entry>? = null
         for ((account, password) in accounts(hostOf(url), user, pass)) {
-            val found = runCatching { listWith(url, account, password) }.getOrDefault(emptyList())
+            val found = runCatching { listWith(url, account, password) }.getOrNull() ?: continue
             if (found.isNotEmpty()) {
                 accountByHost[hostOf(url)] = account to password
                 return found
             }
+            blank = found
         }
-        return emptyList()
+        blank
     }
 
-    fun open(fileUrl: String, user: String, pass: String): SmbRandomAccessFile {
+    fun open(fileUrl: String, user: String, pass: String): SmbRandomAccessFile = exclusive {
         var last: Exception? = null
         for ((account, password) in accounts(hostOf(fileUrl), user, pass)) {
             try {
@@ -63,48 +71,33 @@ object SmbMedia {
     }
 
     /** 文件字节数。读不到时返回 -1。 */
-    fun fileSize(fileUrl: String, user: String, pass: String): Long {
+    fun fileSize(fileUrl: String, user: String, pass: String): Long = exclusive {
         val url = fileUrl.trimEnd('/')
         for ((account, password) in accounts(hostOf(url), user, pass)) {
             val size = runCatching { SmbFile(url, context(account, password)).length() }.getOrDefault(-1L)
             if (size >= 0) return size
         }
-        return -1L
+        -1L
     }
 
     data class Totals(val videos: Int, val images: Int, val bytes: Long, val limited: Boolean)
 
-    /** 目录里的视频和图片数量、总大小。子目录最多再往下两层，避免整盘统计。 */
-    fun totals(dirUrl: String, user: String, pass: String): Totals {
+    /** 只统计这一层里的视频和图片，不进子目录，避免把正在看的列表冲掉。 */
+    fun totals(dirUrl: String, user: String, pass: String): Totals? {
+        val children = list(dirUrl, user, pass) ?: return null
         var videos = 0
         var images = 0
         var bytes = 0L
         var limited = false
-        val queue = ArrayDeque<Pair<String, Int>>()
-        queue.add(dirUrl to 0)
-        var visits = 0
-        while (queue.isNotEmpty()) {
-            val (dir, depth) = queue.removeFirst()
-            if (++visits > 40) {
+        for (child in children) {
+            if (child.kind != Kind.VIDEO && child.kind != Kind.IMAGE) continue
+            if (videos + images >= 200) {
                 limited = true
                 break
             }
-            val children = runCatching { list(dir, user, pass) }.getOrDefault(emptyList())
-            for (child in children) {
-                when (child.kind) {
-                    Kind.VIDEO, Kind.IMAGE -> {
-                        if (videos + images >= 400) {
-                            limited = true
-                            continue
-                        }
-                        if (child.kind == Kind.VIDEO) videos++ else images++
-                        val size = fileSize(child.url, user, pass)
-                        if (size > 0) bytes += size
-                    }
-                    Kind.DIRECTORY -> if (depth < 2) queue.add(child.url to depth + 1)
-                    else -> Unit
-                }
-            }
+            if (child.kind == Kind.VIDEO) videos++ else images++
+            val size = fileSize(child.url, user, pass)
+            if (size > 0) bytes += size
         }
         return Totals(videos, images, bytes, limited)
     }
@@ -164,6 +157,9 @@ object SmbMedia {
         setProperty("jcifs.smb.client.responseTimeout", "20000")
         setProperty("jcifs.smb.client.soTimeout", "20000")
         setProperty("jcifs.smb.client.connTimeout", "8000")
+        setProperty("jcifs.smb.client.tcpNoDelay", "true")
+        setProperty("jcifs.smb.client.rcv_buf_size", "1048576")
+        setProperty("jcifs.smb.client.snd_buf_size", "1048576")
         setProperty("jcifs.smb.client.signingEnforced", "false")
         setProperty("jcifs.smb.client.ipcSigningEnforced", "false")
     })).let { base ->

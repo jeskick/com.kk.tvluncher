@@ -20,10 +20,15 @@ class SmbDataSource(
     private var uri: Uri? = null
     private var remaining = 0L
     private var started = false
+    private val ahead = ByteArray(1024 * 1024)
+    private var aheadPos = 0
+    private var aheadLen = 0
 
-    override fun open(dataSpec: DataSpec): Long {
+    override fun open(dataSpec: DataSpec): Long = SmbMedia.exclusive {
         transferInitializing(dataSpec)
         file?.close()
+        aheadPos = 0
+        aheadLen = 0
         val raf = try {
             SmbMedia.open(dataSpec.uri.toString(), user, pass)
         } catch (e: Exception) {
@@ -38,22 +43,34 @@ class SmbDataSource(
         uri = dataSpec.uri
         started = true
         transferStarted(dataSpec)
-        return remaining
+        remaining
     }
 
-    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = SmbMedia.exclusive {
         if (length == 0) return 0
         if (remaining == 0L) return C.RESULT_END_OF_INPUT
-        val want = minOf(length.toLong(), remaining).toInt()
-        val read = try {
-            file?.read(buffer, offset, want) ?: C.RESULT_END_OF_INPUT
-        } catch (e: Exception) {
-            throw IOException(e.message, e)
+        if (aheadPos >= aheadLen) {
+            val pull = minOf(ahead.size.toLong(), remaining).toInt()
+            var filled = 0
+            while (filled < pull) {
+                val n = try {
+                    file?.read(ahead, filled, pull - filled) ?: -1
+                } catch (e: Exception) {
+                    throw IOException(e.message, e)
+                }
+                if (n <= 0) break
+                filled += n
+            }
+            if (filled <= 0) return C.RESULT_END_OF_INPUT
+            aheadPos = 0
+            aheadLen = filled
         }
-        if (read <= 0) return C.RESULT_END_OF_INPUT
-        remaining -= read
-        bytesTransferred(read)
-        return read
+        val n = minOf(length, aheadLen - aheadPos)
+        System.arraycopy(ahead, aheadPos, buffer, offset, n)
+        aheadPos += n
+        remaining -= n
+        bytesTransferred(n)
+        n
     }
 
     override fun getUri(): Uri? = uri

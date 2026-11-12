@@ -20,12 +20,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
@@ -35,8 +32,15 @@ class LanLibraryActivity : FragmentActivity() {
 
     private lateinit var binding: ActivityLanLibraryBinding
     private val stack = ArrayDeque<String>()
+    private val cache = HashMap<String, List<SmbMedia.Entry>>()
     private var rootItems = emptyList<SmbMedia.Entry>()
+    private var shownRows = emptyList<Row>()
+    private var shownItems = emptyList<SmbMedia.Entry>()
     private var alive = true
+    private var opening = false
+    private var page = 0
+    private var statsToken = 0
+    private var loadJob: Job? = null
     private var detailJob: Job? = null
     private val lockGuard by lazy { LockInputGuard(this, armWhenUnlocked = false) }
     private val user by lazy {
@@ -61,15 +65,19 @@ class LanLibraryActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         lockGuard.start()
+        if (shownRows.isNotEmpty() && detailJob?.isActive != true) startDetails()
     }
 
     override fun onPause() {
+        statsToken++
+        detailJob?.cancel()
         lockGuard.stop()
         super.onPause()
     }
 
     override fun onDestroy() {
         alive = false
+        loadJob?.cancel()
         detailJob?.cancel()
         super.onDestroy()
     }
@@ -84,8 +92,7 @@ class LanLibraryActivity : FragmentActivity() {
             (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_ESCAPE)
         ) {
             if (stack.isNotEmpty()) {
-                stack.removeLast()
-                if (stack.isEmpty()) show(rootItems, null) else open(stack.last())
+                goBack()
                 return true
             }
         }
@@ -99,16 +106,20 @@ class LanLibraryActivity : FragmentActivity() {
         binding.tvPath.text = "正在扫描局域网"
         binding.btnScan.isEnabled = false
         stack.clear()
+        cache.clear()
+        page++
+        opening = true
+        loadJob?.cancel()
         detailJob?.cancel()
-        lifecycleScope.launch {
+        loadJob = lifecycleScope.launch {
             val hosts = SmbScanner.scan(this@LanLibraryActivity)
             val shares = hosts.map { host ->
                 async(Dispatchers.IO) {
-                    withTimeoutOrNull(15_000) {
-                        SmbMedia.list("smb://$host/", user, pass).filter { it.kind == SmbMedia.Kind.DIRECTORY }
-                    }.orEmpty()
+                    SmbMedia.list("smb://$host/", user, pass).orEmpty()
+                        .filter { it.kind == SmbMedia.Kind.DIRECTORY }
                 }
             }.awaitAll().flatten()
+            opening = false
             if (!alive) return@launch
             rootItems = shares
             binding.scanProgress.visibility = View.GONE
@@ -122,28 +133,64 @@ class LanLibraryActivity : FragmentActivity() {
         }
     }
 
-    private fun open(location: String) {
+    private fun goBack() {
+        loadJob?.cancel()
+        detailJob?.cancel()
+        opening = false
+        page++
+        stack.removeLast()
+        binding.scanProgress.visibility = View.GONE
+        binding.tvStatus.visibility = View.GONE
+        if (stack.isEmpty()) show(rootItems, null) else showCached(stack.last())
+    }
+
+    private fun showCached(location: String) {
+        val saved = cache[location]
+        if (saved != null) show(saved.filter { it.kind != SmbMedia.Kind.SUBTITLE }, location)
+        else open(location, push = false)
+    }
+
+    private fun open(location: String, push: Boolean = false) {
+        if (push) {
+            if (opening) return
+            stack.addLast(location)
+        }
+        cache[location]?.let {
+            opening = false
+            show(it.filter { entry -> entry.kind != SmbMedia.Kind.SUBTITLE }, location)
+            return
+        }
+        val token = ++page
+        opening = true
+        detailJob?.cancel()
+        loadJob?.cancel()
         binding.scanProgress.visibility = View.VISIBLE
-        binding.summaryBar.visibility = View.GONE
         binding.tvStatus.visibility = View.GONE
         binding.tvPath.text = "正在打开 ${placeName(location)}"
-        lifecycleScope.launch {
-            val children = withContext(Dispatchers.IO) {
-                withTimeoutOrNull(15_000) { SmbMedia.list(location, user, pass) }.orEmpty()
-            }
-            if (!alive || stack.lastOrNull() != location) return@launch
+        loadJob = lifecycleScope.launch {
+            val children = withContext(Dispatchers.IO) { SmbMedia.list(location, user, pass) }
+            if (!alive || token != page || stack.lastOrNull() != location) return@launch
+            opening = false
             binding.scanProgress.visibility = View.GONE
-            val visible = children.filter { it.kind != SmbMedia.Kind.SUBTITLE }
-            show(visible, location)
+            if (children == null) {
+                stack.removeLast()
+                binding.tvStatus.visibility = View.VISIBLE
+                binding.tvStatus.text = "这个目录暂时打不开"
+                return@launch
+            }
+            cache[location] = children
+            show(children.filter { it.kind != SmbMedia.Kind.SUBTITLE }, location)
         }
     }
 
     private fun show(items: List<SmbMedia.Entry>, location: String?) {
         detailJob?.cancel()
+        shownItems = items
         binding.tvPath.text = if (location == null) "局域网" else placeName(location)
         val list = binding.llList
         list.removeAllViews()
         if (items.isEmpty() && location != null) {
+            shownRows = emptyList()
             binding.summaryBar.visibility = View.GONE
             binding.tvStatus.visibility = View.VISIBLE
             binding.tvStatus.text = "这个目录里没有可播放的文件"
@@ -164,62 +211,71 @@ class LanLibraryActivity : FragmentActivity() {
             rows += addRow(item, waiting)
         }
         bindClicks(rows, items)
+        shownRows = rows
         (list.getChildAt(0) ?: binding.btnScan).requestFocus()
         val folders = items.count { it.kind == SmbMedia.Kind.DIRECTORY }
-        renderSummary(folders, 0, 0, 0L, ready = false)
-        detailJob = lifecycleScope.launch { fillDetails(rows, items) }
+        renderSummary(folders, 0, 0, 0L, ready = items.isEmpty())
+        startDetails()
     }
 
-    private suspend fun fillDetails(rows: List<Row>, items: List<SmbMedia.Entry>) {
+    private fun startDetails() {
+        val rows = shownRows
+        val items = shownItems
+        val token = ++statsToken
+        detailJob?.cancel()
+        detailJob = lifecycleScope.launch { fillDetails(token, rows, items) }
+    }
+
+    private suspend fun fillDetails(token: Int, rows: List<Row>, items: List<SmbMedia.Entry>) {
         val folders = items.count { it.kind == SmbMedia.Kind.DIRECTORY }
         val state = intArrayOf(0, 0) // videos, images
         val size = longArrayOf(0L)
         val lock = Mutex()
-        val gate = Semaphore(2)
-        coroutineScope {
-            rows.forEach { row ->
-                if (row.item.url == "..") return@forEach
-                launch(Dispatchers.IO) {
-                    gate.withPermit {
-                        if (!alive) return@withPermit
-                        when (row.item.kind) {
-                            SmbMedia.Kind.VIDEO, SmbMedia.Kind.IMAGE -> loadFile(row, folders, state, size, lock)
-                            SmbMedia.Kind.DIRECTORY -> loadFolder(row, folders, state, size, lock)
-                            else -> Unit
-                        }
-                    }
-                }
+        for (row in rows) {
+            if (!alive || token != statsToken) return
+            if (row.item.url == "..") continue
+            when (row.item.kind) {
+                SmbMedia.Kind.VIDEO, SmbMedia.Kind.IMAGE -> loadFile(token, row, folders, state, size, lock)
+                SmbMedia.Kind.DIRECTORY -> loadFolder(token, row, folders, state, size, lock)
+                else -> Unit
             }
         }
-        if (alive) renderSummary(folders, state[0], state[1], size[0], ready = true)
+        if (alive && token == statsToken) renderSummary(folders, state[0], state[1], size[0], ready = true)
     }
 
-    private suspend fun loadFile(row: Row, folders: Int, state: IntArray, size: LongArray, lock: Mutex) {
+    private suspend fun loadFile(token: Int, row: Row, folders: Int, state: IntArray, size: LongArray, lock: Mutex) {
         val item = row.item
-        val bytes = runCatching { SmbMedia.fileSize(item.url, user, pass) }.getOrDefault(-1L)
+        val bytes = withContext(Dispatchers.IO) {
+            runCatching { SmbMedia.fileSize(item.url, user, pass) }.getOrDefault(-1L)
+        }
         val hinted = SmbProbe.named(item.name)
         lock.withLock {
             if (item.kind == SmbMedia.Kind.VIDEO) state[0]++ else state[1]++
             if (bytes > 0) size[0] += bytes
             withContext(Dispatchers.Main) {
-                if (!alive) return@withContext
+                if (!alive || token != statsToken) return@withContext
                 row.meta.text = metaLine(hinted, bytes)
                 renderSummary(folders, state[0], state[1], size[0], ready = false)
             }
         }
-        val real = withTimeoutOrNull(12_000) { SmbProbe.resolution(item, user, pass) }
+        if (token != statsToken) return
+        val real = withContext(Dispatchers.IO) {
+            withTimeoutOrNull(8_000) { SmbProbe.resolution(item, user, pass) }
+        }
+        if (token != statsToken) return
         withContext(Dispatchers.Main) {
-            if (alive) row.meta.text = metaLine(real ?: hinted, bytes)
+            if (alive && token == statsToken) row.meta.text = metaLine(real ?: hinted, bytes)
         }
     }
 
-    private suspend fun loadFolder(row: Row, folders: Int, state: IntArray, size: LongArray, lock: Mutex) {
-        val totals = withTimeoutOrNull(20_000) { SmbMedia.totals(row.item.url, user, pass) }
+    private suspend fun loadFolder(token: Int, row: Row, folders: Int, state: IntArray, size: LongArray, lock: Mutex) {
+        val totals = withContext(Dispatchers.IO) { SmbMedia.totals(row.item.url, user, pass) }
+        if (token != statsToken) return
         lock.withLock {
             withContext(Dispatchers.Main) {
-                if (!alive) return@withContext
+                if (!alive || token != statsToken) return@withContext
                 if (totals == null) {
-                    row.meta.text = "未能统计"
+                    row.meta.text = ""
                 } else {
                     state[0] += totals.videos
                     state[1] += totals.images
@@ -236,7 +292,7 @@ class LanLibraryActivity : FragmentActivity() {
         if (folders > 0) parts += "$folders 个目录"
         if (videos > 0) parts += "$videos 个视频"
         if (images > 0) parts += "$images 个图片"
-        if (parts.isEmpty()) parts += "空目录"
+        if (parts.isEmpty()) parts += if (ready) "空目录" else "统计中"
         binding.tvCount.text = parts.joinToString("   ·   ")
         binding.tvBytes.text = when {
             bytes > 0 -> formatSize(bytes)
@@ -251,14 +307,8 @@ class LanLibraryActivity : FragmentActivity() {
             row.view.setOnClickListener {
                 val item = row.item
                 when {
-                    item.url == ".." -> {
-                        stack.removeLast()
-                        if (stack.isEmpty()) show(rootItems, null) else open(stack.last())
-                    }
-                    item.kind == SmbMedia.Kind.DIRECTORY -> {
-                        stack.addLast(item.url)
-                        open(item.url)
-                    }
+                    item.url == ".." -> goBack()
+                    item.kind == SmbMedia.Kind.DIRECTORY -> open(item.url, push = true)
                     else -> play(item, items)
                 }
             }

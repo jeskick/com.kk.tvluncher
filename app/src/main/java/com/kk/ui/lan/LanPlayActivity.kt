@@ -24,6 +24,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -171,7 +172,13 @@ class LanPlayActivity : Activity() {
             .setSubtitleConfigurations(subs)
         mimeOf(item.name)?.let { builder.setMimeType(it) }
         val dataSource = SmbDataSource.Factory(LanPlayRequest.user, LanPlayRequest.pass)
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(20_000, 60_000, 8_000, 12_000)
+            .setTargetBufferBytes(48 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .build()
         val exo = ExoPlayer.Builder(this)
+            .setLoadControl(loadControl)
             .setRenderersFactory(LanRenderersFactory(this))
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, mkvExtractors()))
             .build()
@@ -229,7 +236,7 @@ class LanPlayActivity : Activity() {
 
     private fun loadSubtitles(video: SmbMedia.Entry): List<MediaItem.SubtitleConfiguration> {
         val siblings = runCatching {
-            SmbMedia.list(SmbMedia.parent(video.url), LanPlayRequest.user, LanPlayRequest.pass)
+            SmbMedia.list(SmbMedia.parent(video.url), LanPlayRequest.user, LanPlayRequest.pass).orEmpty()
         }.getOrDefault(emptyList())
         return SmbMedia.subtitlesFor(video, siblings).mapIndexed { index, sub ->
             MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.url))
