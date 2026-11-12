@@ -85,11 +85,41 @@ object SmbMedia {
     }
 
     fun subtitlesFor(video: Entry, siblings: List<Entry>): List<Entry> {
+        val subs = siblings.filter { it.kind == Kind.SUBTITLE }
         val stem = video.name.substringBeforeLast('.')
-        if (stem.isBlank()) return emptyList()
-        return siblings.filter { entry ->
-            entry.kind == Kind.SUBTITLE && entry.name.substringBeforeLast('.').startsWith(stem)
-        }.sortedBy { if (it.name.substringBeforeLast('.') == stem) 0 else 1 }
+        if (stem.isNotBlank()) {
+            val matched = subs.filter { entry ->
+                val name = entry.name.substringBeforeLast('.')
+                name.equals(stem, true) || name.startsWith(stem, true) || stem.startsWith(name, true)
+            }.sortedBy { if (it.name.substringBeforeLast('.').equals(stem, true)) 0 else 1 }
+            if (matched.isNotEmpty()) return matched
+        }
+        return if (subs.size == 1) subs else emptyList()
+    }
+
+    /** 把图片一次读完。走已经登录成功的账号，避免每次先用错误账号白等一轮。 */
+    fun readAll(fileUrl: String, user: String, pass: String, maxBytes: Int = 64 * 1024 * 1024): ByteArray? = exclusive {
+        val raf = try {
+            open(fileUrl, user, pass)
+        } catch (_: Exception) {
+            return null
+        }
+        try {
+            val size = raf.length()
+            if (size <= 0L || size > maxBytes) return null
+            val buf = ByteArray(size.toInt())
+            var off = 0
+            while (off < buf.size) {
+                val n = raf.read(buf, off, buf.size - off)
+                if (n <= 0) break
+                off += n
+            }
+            if (off == buf.size) buf else buf.copyOf(off)
+        } catch (_: Exception) {
+            null
+        } finally {
+            close(raf)
+        }
     }
 
     /** 文件字节数。读不到时返回 -1。 */
