@@ -89,7 +89,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val pkgMap = installed.associateBy { it.packageName }
             val items: List<DockItem> = pkgs
                 .mapNotNull { pkgMap[it] }
-                .map { DockItem.App(it) } + listOf(DockItem.AddButton)
+                .map { DockItem.App(it) } + dockTail()
             _dockItems.value = items
         }
     }
@@ -357,6 +357,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _dockItems.value ?: return
         val apps = current.filterIsInstance<DockItem.App>()
             .sortedByDescending { usagePrefs.getInt(it.appInfo.packageName, 0) }
-        _dockItems.value = apps + listOf(DockItem.AddButton)
+        _dockItems.value = apps + dockTail()
     }
+
+    private fun dockTail() = listOf(DockItem.Library, DockItem.AddButton)
 }

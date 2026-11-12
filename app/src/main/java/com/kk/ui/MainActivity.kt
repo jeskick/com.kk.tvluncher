@@ -34,6 +34,7 @@ import com.kk.tvlauncher.databinding.ActivityMainBinding
 import com.kk.tvlauncher.ui.lock.DesktopLock
 import com.kk.tvlauncher.ui.lock.KeyDecision
 import com.kk.tvlauncher.ui.lock.LockInputGuard
+import com.kk.tvlauncher.ui.lan.LanLibraryActivity
 import com.kk.tvlauncher.ui.picker.AppPickerActivity
 import com.kk.tvlauncher.ui.settings.SettingsActivity
 import com.kk.tvlauncher.utils.LunarCalendar
@@ -281,6 +282,7 @@ class MainActivity : FragmentActivity() {
             onAppClick     = { pkg -> recordUsage(pkg); viewModel.launchApp(pkg) },
             onAppLongClick = { pkg -> viewModel.removeFromDock(pkg) },
             onAddClick     = { startActivity(Intent(this, AppPickerActivity::class.java)) },
+            onLibraryClick = { startActivity(Intent(this, LanLibraryActivity::class.java)) },
             // 功能6：只有最后一个按钮（+）的下键才触发打开全部应用
             onLastItemDownKey = { showAppDrawer() }
         )

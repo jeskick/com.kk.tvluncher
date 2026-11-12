@@ -18,11 +18,13 @@ import com.kk.tvlauncher.model.DockItem
 
 private const val VIEW_TYPE_APP = 0
 private const val VIEW_TYPE_ADD = 1
+private const val VIEW_TYPE_LIBRARY = 2
 
 class DockAdapter(
     private val onAppClick: (String) -> Unit,
     private val onAppLongClick: (String) -> Unit,
     private val onAddClick: () -> Unit,
+    private val onLibraryClick: () -> Unit,
     /** 只有最右边的加号按下才打开应用网格，其它图标按下不往下翻 */
     private val onLastItemDownKey: () -> Unit,
     var focusColorHex: String = "#CCFFFFFF"
@@ -58,6 +60,7 @@ class DockAdapter(
 
     override fun getItemViewType(position: Int) = when (getItem(position)) {
         is DockItem.App -> VIEW_TYPE_APP
+        is DockItem.Library -> VIEW_TYPE_LIBRARY
         is DockItem.AddButton -> VIEW_TYPE_ADD
     }
 
@@ -68,6 +71,12 @@ class DockAdapter(
                     LayoutInflater.from(parent.context), parent, false
                 )
                 AppViewHolder(binding)
+            }
+            VIEW_TYPE_LIBRARY -> {
+                val binding = ItemDockAppBinding.inflate(
+                    LayoutInflater.from(parent.context), parent, false
+                )
+                LibraryViewHolder(binding)
             }
             else -> {
                 val binding = ItemDockAddBinding.inflate(
@@ -81,6 +90,7 @@ class DockAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is DockItem.App -> (holder as AppViewHolder).bind(item)
+            is DockItem.Library -> (holder as LibraryViewHolder).bind()
             is DockItem.AddButton -> (holder as AddViewHolder).bind()
         }
     }
@@ -129,6 +139,49 @@ class DockAdapter(
                 onAppLongClick(app.packageName)
                 true
             }
+            applyFocusBg(b.root, false)
+            b.root.setOnFocusChangeListener { v, hasFocus ->
+                applyFocusBg(v, hasFocus)
+                v.pivotX = v.width / 2f
+                v.pivotY = v.height / 2f
+                v.animate()
+                    .scaleX(if (hasFocus) 1.12f else 1.0f)
+                    .scaleY(if (hasFocus) 1.12f else 1.0f)
+                    .translationZ(if (hasFocus) 16f else 0f)
+                    .setDuration(160)
+                    .start()
+            }
+            b.root.setOnKeyListener { _, keyCode, event ->
+                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when {
+                    keyCode == KeyEvent.KEYCODE_DPAD_UP -> {
+                        b.root.rootView.findViewById<View>(R.id.weatherCard)?.requestFocus()
+                        true
+                    }
+                    keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> true
+                    keyCode == KeyEvent.KEYCODE_DPAD_LEFT && bindingAdapterPosition == 0 -> {
+                        focusPosition(itemCount - 1); true
+                    }
+                    keyCode == KeyEvent.KEYCODE_DPAD_RIGHT &&
+                        bindingAdapterPosition == itemCount - 1 -> {
+                        focusPosition(0); true
+                    }
+                    else -> false
+                }
+            }
+        }
+    }
+
+    inner class LibraryViewHolder(private val b: ItemDockAppBinding) :
+        RecyclerView.ViewHolder(b.root) {
+
+        fun bind() {
+            b.ivCustomIcon.visibility = View.VISIBLE
+            b.ivBanner.visibility = View.GONE
+            b.layoutFallback.visibility = View.GONE
+            b.ivCustomIcon.setImageResource(R.drawable.ic_lan_play)
+            b.root.nextFocusUpId = R.id.weatherCard
+            b.root.setOnClickListener { onLibraryClick() }
             applyFocusBg(b.root, false)
             b.root.setOnFocusChangeListener { v, hasFocus ->
                 applyFocusBg(v, hasFocus)
@@ -230,6 +283,7 @@ class DockAdapter(
     private class DockDiffCallback : DiffUtil.ItemCallback<DockItem>() {
         override fun areItemsTheSame(oldItem: DockItem, newItem: DockItem): Boolean {
             if (oldItem is DockItem.AddButton && newItem is DockItem.AddButton) return true
+            if (oldItem is DockItem.Library && newItem is DockItem.Library) return true
             if (oldItem is DockItem.App && newItem is DockItem.App)
                 return oldItem.appInfo.packageName == newItem.appInfo.packageName
             return false
@@ -238,7 +292,8 @@ class DockAdapter(
         override fun areContentsTheSame(oldItem: DockItem, newItem: DockItem): Boolean {
             if (oldItem is DockItem.App && newItem is DockItem.App)
                 return oldItem.appInfo.appName == newItem.appInfo.appName
-            return oldItem is DockItem.AddButton && newItem is DockItem.AddButton
+            return oldItem is DockItem.AddButton && newItem is DockItem.AddButton ||
+                oldItem is DockItem.Library && newItem is DockItem.Library
         }
     }
 }

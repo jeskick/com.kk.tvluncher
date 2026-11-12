@@ -53,6 +53,17 @@
             android:screenOrientation="landscape" />
 
         <activity
+            android:name=".ui.lan.LanLibraryActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".ui.lan.LanPlayActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+
+        <activity
             android:name=".ui.CastPlayActivity"
             android:exported="true"
             android:launchMode="singleTask"
