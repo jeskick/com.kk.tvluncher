@@ -1,29 +1,34 @@
 package com.kk.tvlauncher.ui.lan
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Bundle
-import android.text.TextUtils
-import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
-import android.view.ViewGroup
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.kk.tvlauncher.R
 import com.kk.tvlauncher.data.SmbMedia
+import com.kk.tvlauncher.data.SmbProbe
 import com.kk.tvlauncher.data.SmbScanner
 import com.kk.tvlauncher.databinding.ActivityLanLibraryBinding
 import com.kk.tvlauncher.ui.MainViewModel
 import com.kk.tvlauncher.ui.lock.KeyDecision
 import com.kk.tvlauncher.ui.lock.LockInputGuard
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 
 /** 扫描局域网共享，选中图片或视频后直接播放。 */
 class LanLibraryActivity : FragmentActivity() {
@@ -32,6 +37,7 @@ class LanLibraryActivity : FragmentActivity() {
     private val stack = ArrayDeque<String>()
     private var rootItems = emptyList<SmbMedia.Entry>()
     private var alive = true
+    private var detailJob: Job? = null
     private val lockGuard by lazy { LockInputGuard(this, armWhenUnlocked = false) }
     private val user by lazy {
         getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -64,6 +70,7 @@ class LanLibraryActivity : FragmentActivity() {
 
     override fun onDestroy() {
         alive = false
+        detailJob?.cancel()
         super.onDestroy()
     }
 
@@ -78,7 +85,7 @@ class LanLibraryActivity : FragmentActivity() {
         ) {
             if (stack.isNotEmpty()) {
                 stack.removeLast()
-                if (stack.isEmpty()) show(rootItems, "按确定播放") else open(stack.last())
+                if (stack.isEmpty()) show(rootItems, null) else open(stack.last())
                 return true
             }
         }
@@ -87,9 +94,12 @@ class LanLibraryActivity : FragmentActivity() {
 
     private fun scan() {
         binding.scanProgress.visibility = View.VISIBLE
-        binding.tvStatus.text = "正在扫描局域网"
+        binding.summaryBar.visibility = View.GONE
+        binding.tvStatus.visibility = View.GONE
+        binding.tvPath.text = "正在扫描局域网"
         binding.btnScan.isEnabled = false
         stack.clear()
+        detailJob?.cancel()
         lifecycleScope.launch {
             val hosts = SmbScanner.scan(this@LanLibraryActivity)
             val shares = hosts.map { host ->
@@ -103,14 +113,20 @@ class LanLibraryActivity : FragmentActivity() {
             rootItems = shares
             binding.scanProgress.visibility = View.GONE
             binding.btnScan.isEnabled = true
-            binding.tvStatus.text = if (shares.isEmpty()) "没有找到共享目录" else "找到 ${shares.size} 个共享，按确定进入"
-            show(shares, binding.tvStatus.text.toString())
+            if (shares.isEmpty()) {
+                binding.tvPath.text = "没有找到共享目录"
+                show(emptyList(), null)
+            } else {
+                show(shares, null)
+            }
         }
     }
 
     private fun open(location: String) {
         binding.scanProgress.visibility = View.VISIBLE
-        binding.tvStatus.text = "正在打开"
+        binding.summaryBar.visibility = View.GONE
+        binding.tvStatus.visibility = View.GONE
+        binding.tvPath.text = "正在打开 ${placeName(location)}"
         lifecycleScope.launch {
             val children = withContext(Dispatchers.IO) {
                 withTimeoutOrNull(15_000) { SmbMedia.list(location, user, pass) }.orEmpty()
@@ -118,24 +134,126 @@ class LanLibraryActivity : FragmentActivity() {
             if (!alive || stack.lastOrNull() != location) return@launch
             binding.scanProgress.visibility = View.GONE
             val visible = children.filter { it.kind != SmbMedia.Kind.SUBTITLE }
-            binding.tvStatus.text = if (visible.isEmpty()) "这个目录里没有可播放的文件" else location
-            show(visible, binding.tvStatus.text.toString())
+            show(visible, location)
         }
     }
 
-    private fun show(items: List<SmbMedia.Entry>, status: String) {
-        binding.tvStatus.text = status
+    private fun show(items: List<SmbMedia.Entry>, location: String?) {
+        detailJob?.cancel()
+        binding.tvPath.text = if (location == null) "局域网" else placeName(location)
         val list = binding.llList
         list.removeAllViews()
-        val rows = mutableListOf<SmbMedia.Entry>()
-        if (stack.isNotEmpty()) rows += SmbMedia.Entry("返回上一级", "..", SmbMedia.Kind.DIRECTORY)
-        rows += items.take(300)
-        rows.forEach { item ->
-            list.addView(row(item) {
+        if (items.isEmpty() && location != null) {
+            binding.summaryBar.visibility = View.GONE
+            binding.tvStatus.visibility = View.VISIBLE
+            binding.tvStatus.text = "这个目录里没有可播放的文件"
+            binding.btnScan.requestFocus()
+            return
+        }
+        binding.tvStatus.visibility = View.GONE
+        val rows = mutableListOf<Row>()
+        if (stack.isNotEmpty()) {
+            rows += addRow(SmbMedia.Entry("返回上一级", "..", SmbMedia.Kind.DIRECTORY), "返回上一层")
+        }
+        items.take(300).forEach { item ->
+            val waiting = when (item.kind) {
+                SmbMedia.Kind.DIRECTORY -> "正在统计"
+                SmbMedia.Kind.VIDEO, SmbMedia.Kind.IMAGE -> "正在读取"
+                else -> ""
+            }
+            rows += addRow(item, waiting)
+        }
+        bindClicks(rows, items)
+        (list.getChildAt(0) ?: binding.btnScan).requestFocus()
+        val folders = items.count { it.kind == SmbMedia.Kind.DIRECTORY }
+        renderSummary(folders, 0, 0, 0L, ready = false)
+        detailJob = lifecycleScope.launch { fillDetails(rows, items) }
+    }
+
+    private suspend fun fillDetails(rows: List<Row>, items: List<SmbMedia.Entry>) {
+        val folders = items.count { it.kind == SmbMedia.Kind.DIRECTORY }
+        val state = intArrayOf(0, 0) // videos, images
+        val size = longArrayOf(0L)
+        val lock = Mutex()
+        val gate = Semaphore(2)
+        coroutineScope {
+            rows.forEach { row ->
+                if (row.item.url == "..") return@forEach
+                launch(Dispatchers.IO) {
+                    gate.withPermit {
+                        if (!alive) return@withPermit
+                        when (row.item.kind) {
+                            SmbMedia.Kind.VIDEO, SmbMedia.Kind.IMAGE -> loadFile(row, folders, state, size, lock)
+                            SmbMedia.Kind.DIRECTORY -> loadFolder(row, folders, state, size, lock)
+                            else -> Unit
+                        }
+                    }
+                }
+            }
+        }
+        if (alive) renderSummary(folders, state[0], state[1], size[0], ready = true)
+    }
+
+    private suspend fun loadFile(row: Row, folders: Int, state: IntArray, size: LongArray, lock: Mutex) {
+        val item = row.item
+        val bytes = runCatching { SmbMedia.fileSize(item.url, user, pass) }.getOrDefault(-1L)
+        val hinted = SmbProbe.named(item.name)
+        lock.withLock {
+            if (item.kind == SmbMedia.Kind.VIDEO) state[0]++ else state[1]++
+            if (bytes > 0) size[0] += bytes
+            withContext(Dispatchers.Main) {
+                if (!alive) return@withContext
+                row.meta.text = metaLine(hinted, bytes)
+                renderSummary(folders, state[0], state[1], size[0], ready = false)
+            }
+        }
+        val real = withTimeoutOrNull(12_000) { SmbProbe.resolution(item, user, pass) }
+        withContext(Dispatchers.Main) {
+            if (alive) row.meta.text = metaLine(real ?: hinted, bytes)
+        }
+    }
+
+    private suspend fun loadFolder(row: Row, folders: Int, state: IntArray, size: LongArray, lock: Mutex) {
+        val totals = withTimeoutOrNull(20_000) { SmbMedia.totals(row.item.url, user, pass) }
+        lock.withLock {
+            withContext(Dispatchers.Main) {
+                if (!alive) return@withContext
+                if (totals == null) {
+                    row.meta.text = "未能统计"
+                } else {
+                    state[0] += totals.videos
+                    state[1] += totals.images
+                    size[0] += totals.bytes
+                    row.meta.text = folderLine(totals)
+                }
+                renderSummary(folders, state[0], state[1], size[0], ready = false)
+            }
+        }
+    }
+
+    private fun renderSummary(folders: Int, videos: Int, images: Int, bytes: Long, ready: Boolean) {
+        val parts = mutableListOf<String>()
+        if (folders > 0) parts += "$folders 个目录"
+        if (videos > 0) parts += "$videos 个视频"
+        if (images > 0) parts += "$images 个图片"
+        if (parts.isEmpty()) parts += "空目录"
+        binding.tvCount.text = parts.joinToString("   ·   ")
+        binding.tvBytes.text = when {
+            bytes > 0 -> formatSize(bytes)
+            !ready -> "统计中"
+            else -> ""
+        }
+        binding.summaryBar.visibility = View.VISIBLE
+    }
+
+    private fun bindClicks(rows: List<Row>, items: List<SmbMedia.Entry>) {
+        rows.forEach { row ->
+            row.view.setOnClickListener {
+                val item = row.item
                 when {
                     item.url == ".." -> {
                         stack.removeLast()
-                        if (stack.isEmpty()) show(rootItems, "按确定播放") else open(stack.last())
+                        if (stack.isEmpty()) show(rootItems, null) else open(stack.last())
                     }
                     item.kind == SmbMedia.Kind.DIRECTORY -> {
                         stack.addLast(item.url)
@@ -143,9 +261,34 @@ class LanLibraryActivity : FragmentActivity() {
                     }
                     else -> play(item, items)
                 }
-            })
+            }
         }
-        (list.getChildAt(0) ?: binding.btnScan).requestFocus()
+    }
+
+    private fun addRow(item: SmbMedia.Entry, meta: String): Row {
+        val view = layoutInflater.inflate(R.layout.item_lan_entry, binding.llList, false)
+        val back = item.url == ".."
+        val badge = view.findViewById<TextView>(R.id.badge)
+        val accent = view.findViewById<View>(R.id.accent)
+        badge.text = when {
+            back -> "返回"
+            item.kind == SmbMedia.Kind.VIDEO -> "视频"
+            item.kind == SmbMedia.Kind.IMAGE -> "图片"
+            else -> "目录"
+        }
+        val color = when {
+            back -> getColor(R.color.text_secondary)
+            item.kind == SmbMedia.Kind.VIDEO -> getColor(R.color.accent)
+            item.kind == SmbMedia.Kind.IMAGE -> Color.parseColor("#FF8EB6FF")
+            else -> Color.parseColor("#99FFFFFF")
+        }
+        badge.setTextColor(color)
+        accent.setBackgroundColor(color)
+        view.findViewById<TextView>(R.id.name).text = item.name
+        val metaView = view.findViewById<TextView>(R.id.meta)
+        metaView.text = meta
+        binding.llList.addView(view)
+        return Row(item, view, metaView)
     }
 
     private fun play(item: SmbMedia.Entry, folder: List<SmbMedia.Entry>) {
@@ -157,35 +300,41 @@ class LanLibraryActivity : FragmentActivity() {
         startActivity(android.content.Intent(this, LanPlayActivity::class.java))
     }
 
-    private fun row(item: SmbMedia.Entry, onClick: () -> Unit): TextView {
-        val pad = (10 * resources.displayMetrics.density).toInt()
-        val mark = when (item.kind) {
-            SmbMedia.Kind.VIDEO -> "视频"
-            SmbMedia.Kind.IMAGE -> "图片"
-            SmbMedia.Kind.DIRECTORY -> if (item.url == "..") "" else "目录"
-            SmbMedia.Kind.SUBTITLE -> "字幕"
-        }
-        return TextView(this).apply {
-            text = if (mark.isBlank()) item.name else "${item.name}    $mark"
-            textSize = 16f
-            gravity = Gravity.CENTER_VERTICAL
-            setTextColor(getColor(R.color.text_primary))
-            setPadding(pad, pad, pad, pad)
-            setBackgroundResource(R.drawable.bg_input)
-            isFocusable = true
-            isClickable = true
-            isFocusableInTouchMode = true
-            isSingleLine = true
-            ellipsize = TextUtils.TruncateAt.MIDDLE
-            setOnClickListener { onClick() }
-            setOnFocusChangeListener { v, hasFocus ->
-                v.setBackgroundResource(if (hasFocus) R.drawable.bg_btn_accent else R.drawable.bg_input)
-                (v as TextView).setTextColor(getColor(if (hasFocus) R.color.bg_dark else R.color.text_primary))
-            }
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = pad / 2 }
+    private fun placeName(url: String): String {
+        val parts = url.removePrefix("smb://").trim('/').split('/').filter { it.isNotBlank() }
+        return parts.joinToString("   /   ").ifBlank { "局域网" }
+    }
+
+    private fun folderLine(totals: SmbMedia.Totals): String {
+        val plus = if (totals.limited) "+" else ""
+        val parts = mutableListOf<String>()
+        if (totals.videos > 0) parts += "${totals.videos}$plus 个视频"
+        if (totals.images > 0) parts += "${totals.images}$plus 个图片"
+        if (parts.isEmpty()) return "空目录"
+        val size = if (totals.bytes > 0) formatSize(totals.bytes) else ""
+        return if (size.isBlank()) parts.joinToString("   ·   ") else parts.joinToString("   ·   ") + "   ·   " + size
+    }
+
+    private fun metaLine(resolution: String?, bytes: Long): String {
+        val size = if (bytes >= 0) formatSize(bytes) else ""
+        return listOfNotNull(resolution?.takeIf { it.isNotBlank() }, size.takeIf { it.isNotBlank() })
+            .joinToString("   ·   ")
+            .ifBlank { "未能读取" }
+    }
+
+    private data class Row(val item: SmbMedia.Entry, val view: View, val meta: TextView)
+
+    companion object {
+        fun formatSize(bytes: Long): String {
+            val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+            if (gb >= 10) return String.format(Locale.US, "%.1f GB", gb)
+            if (gb >= 1) return String.format(Locale.US, "%.2f GB", gb)
+            val mb = bytes / (1024.0 * 1024.0)
+            if (mb >= 10) return String.format(Locale.US, "%.0f MB", mb)
+            if (mb >= 1) return String.format(Locale.US, "%.1f MB", mb)
+            val kb = bytes / 1024.0
+            if (kb >= 1) return String.format(Locale.US, "%.0f KB", kb)
+            return "$bytes B"
         }
     }
 }

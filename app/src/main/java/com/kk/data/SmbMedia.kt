@@ -62,6 +62,53 @@ object SmbMedia {
         }.sortedBy { if (it.name.substringBeforeLast('.') == stem) 0 else 1 }
     }
 
+    /** 文件字节数。读不到时返回 -1。 */
+    fun fileSize(fileUrl: String, user: String, pass: String): Long {
+        val url = fileUrl.trimEnd('/')
+        for ((account, password) in accounts(hostOf(url), user, pass)) {
+            val size = runCatching { SmbFile(url, context(account, password)).length() }.getOrDefault(-1L)
+            if (size >= 0) return size
+        }
+        return -1L
+    }
+
+    data class Totals(val videos: Int, val images: Int, val bytes: Long, val limited: Boolean)
+
+    /** 目录里的视频和图片数量、总大小。子目录最多再往下两层，避免整盘统计。 */
+    fun totals(dirUrl: String, user: String, pass: String): Totals {
+        var videos = 0
+        var images = 0
+        var bytes = 0L
+        var limited = false
+        val queue = ArrayDeque<Pair<String, Int>>()
+        queue.add(dirUrl to 0)
+        var visits = 0
+        while (queue.isNotEmpty()) {
+            val (dir, depth) = queue.removeFirst()
+            if (++visits > 40) {
+                limited = true
+                break
+            }
+            val children = runCatching { list(dir, user, pass) }.getOrDefault(emptyList())
+            for (child in children) {
+                when (child.kind) {
+                    Kind.VIDEO, Kind.IMAGE -> {
+                        if (videos + images >= 400) {
+                            limited = true
+                            continue
+                        }
+                        if (child.kind == Kind.VIDEO) videos++ else images++
+                        val size = fileSize(child.url, user, pass)
+                        if (size > 0) bytes += size
+                    }
+                    Kind.DIRECTORY -> if (depth < 2) queue.add(child.url to depth + 1)
+                    else -> Unit
+                }
+            }
+        }
+        return Totals(videos, images, bytes, limited)
+    }
+
     private fun listWith(url: String, user: String, pass: String): List<Entry> {
         val dir = SmbFile(url, context(user, pass))
         val names = dir.list() ?: return emptyList()
