@@ -3,11 +3,14 @@
 package com.kk.tvlauncher.ui.lan
 
 import android.app.Activity
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.SurfaceView
@@ -19,8 +22,14 @@ import android.widget.TextView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.Extractor
+import androidx.media3.extractor.ExtractorsFactory
+import androidx.media3.extractor.mkv.MatroskaExtractor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.bumptech.glide.Glide
 import com.kk.tvlauncher.data.SmbDataSource
@@ -38,9 +47,8 @@ class LanPlayActivity : Activity() {
     private var picture: ImageView? = null
     private var surface: SurfaceView? = null
     private var title: TextView? = null
-    private var bar: TextView? = null
-    private var flash: TextView? = null
-    private val hideFlash = Runnable { flash?.visibility = View.GONE }
+    private var timeBar: TimeBar? = null
+    private var audioDropped = false
     private val tick = object : Runnable {
         override fun run() {
             refreshBar()
@@ -60,15 +68,14 @@ class LanPlayActivity : Activity() {
         title = label(Gravity.TOP or Gravity.START, 18f).apply {
             setPadding(dp(28), dp(24), dp(28), 0)
         }
-        flash = label(Gravity.CENTER, 28f).apply { visibility = View.GONE }
-        bar = label(Gravity.BOTTOM or Gravity.START, 18f).apply {
-            setPadding(dp(28), 0, dp(28), dp(24))
-        }
+        timeBar = TimeBar(this)
         root.addView(surface, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(picture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(title, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
-        root.addView(flash, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-        root.addView(bar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        root.addView(
+            timeBar,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(72), Gravity.BOTTOM)
+        )
         setContentView(root)
         showCurrent()
     }
@@ -133,19 +140,21 @@ class LanPlayActivity : Activity() {
         if (item.kind == SmbMedia.Kind.IMAGE) {
             surface?.visibility = View.GONE
             picture?.visibility = View.VISIBLE
-            bar?.text = "左右或上下换一张，返回退出"
+            timeBar?.visibility = View.GONE
             Thread {
                 val bytes = com.kk.tvlauncher.data.SmbImageFetcher.loadBytes(item.url, LanPlayRequest.user, LanPlayRequest.pass)
                 runOnUiThread {
                     if (current()?.url != item.url) return@runOnUiThread
-                    if (bytes == null) flash("打不开这张图片") else picture?.let { Glide.with(this).load(bytes).into(it) }
+                    if (bytes != null) picture?.let { Glide.with(this).load(bytes).into(it) }
                 }
             }.start()
             return
         }
         picture?.visibility = View.GONE
         surface?.visibility = View.VISIBLE
-        bar?.text = "正在打开"
+        timeBar?.visibility = View.VISIBLE
+        timeBar?.setTimes(0L, C.TIME_UNSET)
+        audioDropped = false
         Thread {
             val subs = loadSubtitles(item)
             runOnUiThread {
@@ -157,25 +166,65 @@ class LanPlayActivity : Activity() {
 
     private fun startVideo(item: SmbMedia.Entry, subs: List<MediaItem.SubtitleConfiguration>) {
         if (current()?.url != item.url) return
-        val media = MediaItem.Builder()
+        val builder = MediaItem.Builder()
             .setUri(item.url)
             .setSubtitleConfigurations(subs)
-            .build()
+        mimeOf(item.name)?.let { builder.setMimeType(it) }
+        val dataSource = SmbDataSource.Factory(LanPlayRequest.user, LanPlayRequest.pass)
         val exo = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(SmbDataSource.Factory(LanPlayRequest.user, LanPlayRequest.pass)))
+            .setRenderersFactory(LanRenderersFactory(this))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSource, mkvExtractors()))
             .build()
         exo.setVideoSurfaceView(surface)
         exo.setWakeMode(C.WAKE_MODE_LOCAL)
-        exo.setMediaItem(media)
+        exo.setMediaItem(builder.build())
         exo.addListener(object : Player.Listener {
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                flash("这个视频打不开")
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e("LanPlay", "code=${error.errorCodeName}", error)
+                if (audioDropped || !isAudioError(error)) return
+                audioDropped = true
+                val position = exo.currentPosition
+                exo.trackSelectionParameters = exo.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                    .build()
+                exo.prepare()
+                exo.seekTo(position)
+                exo.play()
             }
         })
         exo.prepare()
         exo.play()
         player = exo
-        if (subs.isNotEmpty()) flash("已加载字幕")
+    }
+
+    private fun isAudioError(error: PlaybackException): Boolean {
+        val renderer = (error as? ExoPlaybackException)?.rendererName
+        if (renderer?.contains("Audio", true) == true) return true
+        var cause = error.cause
+        while (cause != null) {
+            if (cause.javaClass.name.contains("Audio")) return true
+            cause = cause.cause
+        }
+        return false
+    }
+
+    private fun mkvExtractors(): ExtractorsFactory = ExtractorsFactory {
+        DefaultExtractorsFactory().createExtractors().map { extractor ->
+            if (extractor is MatroskaExtractor) {
+                extractor.release()
+                MatroskaExtractor(MatroskaExtractor.FLAG_DISABLE_SEEK_FOR_CUES)
+            } else {
+                extractor
+            }
+        }.toTypedArray()
+    }
+
+    private fun mimeOf(name: String): String? = when (name.substringAfterLast('.', "").lowercase()) {
+        "mkv", "webm" -> MimeTypes.VIDEO_MATROSKA
+        "mp4", "m4v", "mov" -> MimeTypes.VIDEO_MP4
+        "mp3" -> MimeTypes.AUDIO_MPEG
+        "ts" -> MimeTypes.VIDEO_MP2T
+        else -> null
     }
 
     private fun loadSubtitles(video: SmbMedia.Entry): List<MediaItem.SubtitleConfiguration> {
@@ -194,13 +243,7 @@ class LanPlayActivity : Activity() {
 
     private fun toggle() {
         val exo = player ?: return
-        if (exo.isPlaying) {
-            exo.pause()
-            flash("暂停")
-        } else {
-            exo.play()
-            flash("播放")
-        }
+        if (exo.isPlaying) exo.pause() else exo.play()
         refreshBar()
     }
 
@@ -210,7 +253,6 @@ class LanPlayActivity : Activity() {
         val target = exo.currentPosition + seconds * 1000L
         val next = if (duration > 0) target.coerceIn(0L, duration) else max(0L, target)
         exo.seekTo(next)
-        flash(if (seconds < 0) "快退 10 秒" else "快进 10 秒")
         refreshBar()
     }
 
@@ -218,26 +260,14 @@ class LanPlayActivity : Activity() {
         val items = LanPlayRequest.items
         if (items.isEmpty()) return
         val next = LanPlayRequest.index + delta
-        if (next !in items.indices) {
-            flash(if (delta < 0) "已经是第一个" else "已经是最后一个")
-            return
-        }
+        if (next !in items.indices) return
         LanPlayRequest.index = next
         showCurrent()
     }
 
     private fun refreshBar() {
-        val exo = player
-        if (exo == null) return
-        val state = if (exo.isPlaying) "播放" else "暂停"
-        bar?.text = "$state    ${clock(exo.currentPosition)} / ${clock(exo.duration)}    左快退  右快进  确定暂停"
-    }
-
-    private fun flash(text: String) {
-        flash?.text = text
-        flash?.visibility = View.VISIBLE
-        flash?.removeCallbacks(hideFlash)
-        flash?.postDelayed(hideFlash, 1200)
+        val exo = player ?: return
+        timeBar?.setTimes(exo.currentPosition, exo.duration)
     }
 
     private fun current(): SmbMedia.Entry? = LanPlayRequest.items.getOrNull(LanPlayRequest.index)
@@ -256,14 +286,49 @@ class LanPlayActivity : Activity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun clock(ms: Long): String {
-        if (ms < 0) return "--:--"
-        val total = ms / 1000
-        val hour = total / 3600
-        val minute = (total % 3600) / 60
-        val second = total % 60
-        return if (hour > 0) "%d:%02d:%02d".format(hour, minute, second)
-        else "%02d:%02d".format(minute, second)
+    private class TimeBar(context: android.content.Context) : View(context) {
+        private var positionMs = 0L
+        private var durationMs = 0L
+        private val density = resources.displayMetrics.density
+        private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 16f * resources.displayMetrics.scaledDensity
+            setShadowLayer(8f, 0f, 2f, Color.BLACK)
+        }
+        private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66FFFFFF }
+        private val played = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+
+        fun setTimes(position: Long, duration: Long) {
+            positionMs = position
+            durationMs = duration
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            val pad = 28f * density
+            val line = 3f * density
+            val bottom = height - 18f * density
+            val top = bottom - line
+            val rightEdge = width - pad
+            canvas.drawRoundRect(pad, top, rightEdge, bottom, line, line, track)
+            val span = (rightEdge - pad).coerceAtLeast(0f)
+            val frac = if (durationMs > 0) positionMs.coerceIn(0L, durationMs).toFloat() / durationMs else 0f
+            canvas.drawRoundRect(pad, top, pad + span * frac, bottom, line, line, played)
+            val baseline = top - 12f * density
+            canvas.drawText(clock(positionMs), pad, baseline, text)
+            val end = clock(durationMs)
+            canvas.drawText(end, rightEdge - text.measureText(end), baseline, text)
+        }
+
+        private fun clock(ms: Long): String {
+            if (ms < 0) return "--:--"
+            val total = ms / 1000
+            val hour = total / 3600
+            val minute = (total % 3600) / 60
+            val second = total % 60
+            return if (hour > 0) "%d:%02d:%02d".format(hour, minute, second)
+            else "%02d:%02d".format(minute, second)
+        }
     }
 
     private fun subtitleMime(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
