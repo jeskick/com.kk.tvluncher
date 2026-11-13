@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
@@ -40,7 +41,7 @@ import com.kk.tvlauncher.ui.lock.KeyDecision
 import com.kk.tvlauncher.ui.lock.LockInputGuard
 import kotlin.math.max
 
-/** 播放共享里的一个文件。左右快退快进，确定暂停或继续。 */
+/** 播放共享里的一个文件。视频里点按左右跳 5 秒，按住持续拖动；上下只唤出信息。 */
 class LanPlayActivity : Activity() {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -55,8 +56,44 @@ class LanPlayActivity : Activity() {
     private var wantedSubtitle: String? = null
     private var subtitlePicked = false
     private var fileBytes = -1L
+    private var playingUrl: String? = null
+    private var progressTicks = 0
+    private var scrubDir = 0
+    private var scrubbing = false
+    private var scrubBase = 0L
+    private var scrubPreview = 0L
+    private var scrubSince = 0L
+    private var lastSeekAt = 0L
     private val images = LinkedHashMap<String, ByteArray>()
-    private val hideInfo = Runnable { info?.visibility = View.GONE }
+    private val hideInfo: Runnable = Runnable { hideOverlay() }
+    private val armScrub = Runnable {
+        val exo = player ?: return@Runnable
+        scrubbing = true
+        scrubBase = exo.currentPosition
+        scrubPreview = scrubBase
+        scrubSince = SystemClock.uptimeMillis()
+        lastSeekAt = 0L
+        handler.post(scrubTick)
+    }
+    private val scrubTick = object : Runnable {
+        override fun run() {
+            if (!scrubbing) return
+            val exo = player ?: return
+            val elapsed = SystemClock.uptimeMillis() - scrubSince
+            val offset = scrubOffset(elapsed)
+            val duration = exo.duration
+            val target = scrubBase + scrubDir * offset
+            scrubPreview = if (duration > 0) target.coerceIn(0L, duration) else max(0L, target)
+            timeBar?.visibility = View.VISIBLE
+            timeBar?.setTimes(scrubPreview, duration)
+            val now = SystemClock.uptimeMillis()
+            if (now - lastSeekAt >= 300) {
+                lastSeekAt = now
+                exo.seekTo(scrubPreview)
+            }
+            handler.postDelayed(this, 50)
+        }
+    }
     private val tick = object : Runnable {
         override fun run() {
             refreshBar()
@@ -103,6 +140,8 @@ class LanPlayActivity : Activity() {
     override fun onStop() {
         handler.removeCallbacks(tick)
         handler.removeCallbacks(hideInfo)
+        handler.removeCallbacks(armScrub)
+        handler.removeCallbacks(scrubTick)
         lockGuard.stop()
         releasePlayer()
         super.onStop()
@@ -114,17 +153,30 @@ class LanPlayActivity : Activity() {
             KeyDecision.SYSTEM -> return super.dispatchKeyEvent(event)
             KeyDecision.UI -> Unit
         }
-        if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val video = current()?.kind == SmbMedia.Kind.VIDEO
+        if (event.action == KeyEvent.ACTION_UP) {
+            if (video && (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+                onVideoSeekUp()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
+        if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (video && event.repeatCount == 0) seek(-10) else if (!video && event.repeatCount == 0) step(-1)
-                reveal()
+                if (video) {
+                    if (event.repeatCount == 0) onVideoSeekDown(-5) else reveal()
+                } else if (event.repeatCount == 0) {
+                    step(-1)
+                }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (video && event.repeatCount == 0) seek(10) else if (!video && event.repeatCount == 0) step(1)
-                reveal()
+                if (video) {
+                    if (event.repeatCount == 0) onVideoSeekDown(5) else reveal()
+                } else if (event.repeatCount == 0) {
+                    step(1)
+                }
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_BUTTON_A -> {
@@ -133,11 +185,13 @@ class LanPlayActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_UP -> {
-                if (event.repeatCount == 0) step(-1)
+                if (event.repeatCount != 0) return true
+                if (video) reveal() else step(-1)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (event.repeatCount == 0) step(1)
+                if (event.repeatCount != 0) return true
+                if (video) reveal() else step(1)
                 return true
             }
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
@@ -248,6 +302,7 @@ class LanPlayActivity : Activity() {
         memory: Map<String, ByteArray>
     ) {
         if (current()?.url != item.url) return
+        playingUrl = item.url
         wantedSubtitle = subs.firstOrNull()?.label
         val builder = MediaItem.Builder()
             .setUri(item.url)
@@ -270,7 +325,8 @@ class LanPlayActivity : Activity() {
             .setPreferredTextLanguage("zh")
             .setSelectUndeterminedTextLanguage(true)
             .build()
-        exo.setMediaItem(builder.build())
+        val resumeAt = savedPosition(item.url)
+        if (resumeAt > 0L) exo.setMediaItem(builder.build(), resumeAt) else exo.setMediaItem(builder.build())
         exo.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("LanPlay", "code=${error.errorCodeName}", error)
@@ -425,6 +481,56 @@ class LanPlayActivity : Activity() {
         refreshBar()
     }
 
+    private fun onVideoSeekDown(seconds: Int) {
+        handler.removeCallbacks(armScrub)
+        if (scrubbing) finishScrub()
+        scrubDir = if (seconds < 0) -1 else 1
+        seek(seconds)
+        reveal()
+        handler.postDelayed(armScrub, 450)
+    }
+
+    private fun onVideoSeekUp() {
+        handler.removeCallbacks(armScrub)
+        if (scrubbing) finishScrub() else reveal()
+    }
+
+    private fun finishScrub() {
+        handler.removeCallbacks(scrubTick)
+        scrubbing = false
+        player?.seekTo(scrubPreview)
+        refreshBar()
+        reveal()
+    }
+
+    private fun scrubOffset(elapsedMs: Long): Long {
+        val t = elapsedMs / 1000.0
+        val seconds = if (t <= 1.0) t * 12 else 12 + (t - 1) * (16 + (t - 1) * 24)
+        return (seconds * 1000).toLong()
+    }
+
+    private fun progressStore() = getSharedPreferences("lan_progress", MODE_PRIVATE)
+
+    private fun savedPosition(url: String): Long = progressStore().getLong(url, 0L)
+
+    private fun rememberPosition(url: String, position: Long, duration: Long, clearStart: Boolean = false) {
+        if (position < 0L || duration <= 0L) return
+        val editor = progressStore().edit()
+        val remaining = duration - position
+        when {
+            remaining <= 8_000L && position > 0L -> editor.remove(url)
+            position >= 5_000L -> {
+                editor.putLong(url, position)
+                if (progressStore().all.size > 300) {
+                    progressStore().all.keys.firstOrNull { it != url }?.let { editor.remove(it) }
+                }
+            }
+            clearStart -> editor.remove(url)
+            else -> return
+        }
+        editor.apply()
+    }
+
     private fun step(delta: Int) {
         val items = LanPlayRequest.items
         if (items.isEmpty()) return
@@ -436,16 +542,32 @@ class LanPlayActivity : Activity() {
 
     private fun refreshBar() {
         val exo = player ?: return
-        timeBar?.setTimes(exo.currentPosition, exo.duration)
+        if (!scrubbing) timeBar?.setTimes(exo.currentPosition, exo.duration)
         val item = current() ?: return
         if (item.kind == SmbMedia.Kind.VIDEO && info?.visibility == View.VISIBLE) {
             info?.text = describe(item)
         }
+        if (scrubbing || !exo.isPlaying) return
+        if (++progressTicks < 10) return
+        progressTicks = 0
+        rememberPosition(item.url, exo.currentPosition, exo.duration)
+    }
+
+    private fun hideOverlay() {
+        if (scrubbing) {
+            handler.postDelayed(hideInfo, 4_000)
+            return
+        }
+        info?.visibility = View.GONE
+        if (current()?.kind == SmbMedia.Kind.VIDEO) timeBar?.visibility = View.GONE
     }
 
     private fun reveal() {
         val item = current() ?: return
-        if (item.kind == SmbMedia.Kind.VIDEO) info?.text = describe(item)
+        if (item.kind == SmbMedia.Kind.VIDEO) {
+            info?.text = describe(item)
+            timeBar?.visibility = View.VISIBLE
+        }
         info?.visibility = View.VISIBLE
         handler.removeCallbacks(hideInfo)
         handler.postDelayed(hideInfo, 4_000)
@@ -478,6 +600,15 @@ class LanPlayActivity : Activity() {
     private fun current(): SmbMedia.Entry? = LanPlayRequest.items.getOrNull(LanPlayRequest.index)
 
     private fun releasePlayer() {
+        val exo = player
+        val url = playingUrl
+        if (exo != null && url != null) {
+            val position = if (scrubbing) scrubPreview else exo.currentPosition
+            val ready = exo.playbackState == Player.STATE_READY || exo.playbackState == Player.STATE_ENDED
+            rememberPosition(url, position, exo.duration, clearStart = ready)
+        }
+        playingUrl = null
+        scrubbing = false
         player?.release()
         player = null
     }
