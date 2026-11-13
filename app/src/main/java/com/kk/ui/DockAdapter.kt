@@ -176,10 +176,12 @@ class DockAdapter(
         RecyclerView.ViewHolder(b.root) {
 
         fun bind() {
-            b.ivCustomIcon.visibility = View.VISIBLE
+            b.ivCustomIcon.visibility = View.GONE
             b.ivBanner.visibility = View.GONE
-            b.layoutFallback.visibility = View.GONE
-            b.ivCustomIcon.setImageResource(R.drawable.ic_lan_play)
+            b.layoutFallback.visibility = View.VISIBLE
+            b.ivIcon.setImageResource(R.drawable.ic_lan_play)
+            b.tvAppName.text = b.root.context.getString(R.string.dock_lan)
+            b.tvAppName.textSize = 13f
             b.root.nextFocusUpId = R.id.weatherCard
             b.root.setOnClickListener { onLibraryClick() }
             applyFocusBg(b.root, false)
