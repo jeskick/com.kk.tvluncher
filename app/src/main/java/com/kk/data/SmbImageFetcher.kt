@@ -64,21 +64,20 @@ object SmbImageFetcher {
     }
 
     private fun listImagesWith(dirUrl: String, user: String, pass: String): List<String> {
-        return try {
-            val ctx = buildContext(user, pass)
+        val ctx = buildContext(user, pass)
+        try {
             val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
             val dir = SmbFile(url, ctx)
-
-            // 列出所有条目，过滤图片文件
             val allEntries = dir.list() ?: return emptyList()
-            val result = allEntries.mapNotNull { raw ->
+            return allEntries.mapNotNull { raw ->
                 val name = raw.trim().trim('/')
                 if (!isImageName(name)) return@mapNotNull null
                 url.trimEnd('/') + "/" + name
             }
-            result
         } catch (e: Exception) {
-            emptyList()
+            return emptyList()
+        } finally {
+            runCatching { ctx.close() }
         }
     }
 
@@ -86,8 +85,8 @@ object SmbImageFetcher {
 
     /** 列出共享或目录。目录在前，隐藏系统共享（IPC$ 等）。 */
     fun listEntries(dirUrl: String, user: String = "", pass: String = ""): List<SmbEntry> {
-        return try {
-            val ctx = buildContext(user, pass, forList = true)
+        val ctx = buildContext(user, pass, forList = true)
+        try {
             val url = if (dirUrl.endsWith("/")) dirUrl else "$dirUrl/"
             val dir = SmbFile(url, ctx)
             if (isServerRoot(url)) {
@@ -118,7 +117,9 @@ object SmbImageFetcher {
             }.sortedWith(compareBy({ !it.directory }, { it.name.lowercase() }))
         } catch (e: Exception) {
             Log.w("SmbImageFetcher", "listEntries $dirUrl: ${e.message}")
-            emptyList()
+            return emptyList()
+        } finally {
+            runCatching { ctx.close() }
         }
     }
 
@@ -155,13 +156,34 @@ object SmbImageFetcher {
     }
 
     private fun loadBytesWith(fileUrl: String, user: String, pass: String): ByteArray? {
-        return try {
-            val ctx = buildContext(user, pass)
-            SmbFile(fileUrl, ctx).inputStream.use { it.readBytes() }
+        val ctx = buildContext(user, pass)
+        try {
+            val file = SmbFile(fileUrl, ctx)
+            val size = runCatching { file.length() }.getOrDefault(-1L)
+            if (size > MAX_IMAGE_BYTES) return null
+            return file.inputStream.use { readLimited(it, MAX_IMAGE_BYTES) }
         } catch (e: Exception) {
-            null
+            return null
+        } finally {
+            runCatching { ctx.close() }
         }
     }
+
+    private fun readLimited(input: InputStream, max: Int): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > max) return null
+            out.write(buf, 0, n)
+        }
+        return if (total == 0) null else out.toByteArray()
+    }
+
+    private const val MAX_IMAGE_BYTES = 32 * 1024 * 1024
 
     private fun accounts(user: String, pass: String): List<Pair<String, String>> {
         val tries = mutableListOf<Pair<String, String>>()

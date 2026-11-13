@@ -93,7 +93,7 @@ object WebDavImageFetcher {
                 connectTimeout = 8_000
                 readTimeout   = 20_000
             }
-            conn.inputStream.use { it.readBytes() }.also {
+            conn.inputStream.use { readLimited(it) }.also {
                 conn.disconnect()
             }
         } catch (e: Exception) {
@@ -131,5 +131,20 @@ object WebDavImageFetcher {
             } catch (e2: Exception) {
             }
         }
+    }
+
+    private fun readLimited(input: java.io.InputStream): ByteArray? {
+        val max = 32 * 1024 * 1024
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(16 * 1024)
+        var total = 0
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > max) return null
+            out.write(buf, 0, n)
+        }
+        return if (total == 0) null else out.toByteArray()
     }
 }

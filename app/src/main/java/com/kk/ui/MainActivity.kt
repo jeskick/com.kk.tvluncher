@@ -18,9 +18,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 import androidx.activity.viewModels
 import androidx.core.view.doOnLayout
 import androidx.fragment.app.FragmentActivity
@@ -61,6 +62,7 @@ class MainActivity : FragmentActivity() {
     private var rowTop: View? = null
     private var dockIndex = 0
     private var shownWallpaper: String? = null
+    private var wallpaperJob: kotlinx.coroutines.Job? = null
 
     // ── 时钟更新 ──────────────────────────────────────────────────────────────
     private val clockRunnable = object : Runnable {
@@ -612,13 +614,23 @@ class MainActivity : FragmentActivity() {
             val transition = getWallpaperTransition()
             when {
                 path.startsWith("smb://") || path.startsWith("https://") -> {
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        val bytes = viewModel.loadImageBytes(path)
-                        val finalBitmap = bytes?.let { tryMergePortrait(it, path) }
+                    wallpaperJob?.cancel()
+                    wallpaperJob = lifecycleScope.launch(Dispatchers.IO) {
+                        val bytes = viewModel.loadImageBytes(path) ?: return@launch
+                        if (!isActive || shownWallpaper != path) return@launch
+                        val merged = tryMergePortrait(bytes, path)
+                        if (!isActive || shownWallpaper != path) {
+                            merged?.let { if (!it.isRecycled) it.recycle() }
+                            return@launch
+                        }
                         withContext(Dispatchers.Main) {
+                            if (isDestroyed || shownWallpaper != path) {
+                                merged?.let { if (!it.isRecycled) it.recycle() }
+                                return@withContext
+                            }
                             when {
-                                finalBitmap != null -> loadBg(finalBitmap, transition)
-                                bytes != null       -> loadBg(bytes, transition)
+                                merged != null -> loadBg(merged, transition)
+                                else -> loadBg(bytes, transition)
                             }
                         }
                     }
@@ -658,29 +670,53 @@ class MainActivity : FragmentActivity() {
         return try {
             val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
-            if (opts.outHeight <= opts.outWidth * 1.15) return null
+            if (opts.outWidth <= 0 || opts.outHeight <= opts.outWidth * 1.15) return null
 
             val candidate = viewModel.getPortraitCandidate(currentUrl) ?: return null
             val bytes2 = viewModel.loadImageBytes(candidate) ?: return null
-            val b1 = BitmapFactory.decodeByteArray(bytes,  0, bytes.size)  ?: return null
-            val b2 = BitmapFactory.decodeByteArray(bytes2, 0, bytes2.size) ?: return null
+            val b1 = decodeSampled(bytes, 1920) ?: return null
+            val b2 = decodeSampled(bytes2, 1920) ?: run {
+                if (!b1.isRecycled) b1.recycle()
+                return null
+            }
 
             val targetH = maxOf(b1.height, b2.height).coerceAtMost(1080)
-            val w1 = (b1.width * (targetH.toFloat() / b1.height)).toInt()
-            val w2 = (b2.width * (targetH.toFloat() / b2.height)).toInt()
+            val w1 = (b1.width * (targetH.toFloat() / b1.height)).toInt().coerceAtLeast(1)
+            val w2 = (b2.width * (targetH.toFloat() / b2.height)).toInt().coerceAtLeast(1)
             val targetW = 1920
             val ratio = targetW.toFloat() / (w1 + w2)
-            val fw1 = (w1 * ratio).toInt()
-            val fw2 = targetW - fw1
+            val fw1 = (w1 * ratio).toInt().coerceAtLeast(1)
+            val fw2 = (targetW - fw1).coerceAtLeast(1)
             val s1 = Bitmap.createScaledBitmap(b1, fw1, targetH, true)
             val s2 = Bitmap.createScaledBitmap(b2, fw2, targetH, true)
-            val result = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+            val result = Bitmap.createBitmap(fw1 + fw2, targetH, Bitmap.Config.ARGB_8888)
             Canvas(result).apply {
                 drawBitmap(s1, 0f, 0f, null)
                 drawBitmap(s2, fw1.toFloat(), 0f, null)
             }
-            b1.recycle(); b2.recycle(); s1.recycle(); s2.recycle()
+            recycleDistinct(b1, b2, s1, s2)
             result
-        } catch (_: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun decodeSampled(bytes: ByteArray, maxEdge: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (sample < 64 &&
+            (bounds.outWidth / sample > maxEdge * 2 || bounds.outHeight / sample > maxEdge * 2)
+        ) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+    }
+
+    private fun recycleDistinct(vararg bitmaps: Bitmap) {
+        val seen = HashSet<Bitmap>()
+        for (bitmap in bitmaps) {
+            if (seen.add(bitmap) && !bitmap.isRecycled) bitmap.recycle()
+        }
     }
 }

@@ -3,6 +3,7 @@
 package com.kk.tvlauncher.ui.lan
 
 import android.app.Activity
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
@@ -58,13 +59,15 @@ class LanPlayActivity : Activity() {
     private var fileBytes = -1L
     private var playingUrl: String? = null
     private var progressTicks = 0
+    private var playToken = 0
+    private var imageToken = 0
     private var scrubDir = 0
     private var scrubbing = false
     private var scrubBase = 0L
     private var scrubPreview = 0L
     private var scrubSince = 0L
     private var lastSeekAt = 0L
-    private val images = LinkedHashMap<String, ByteArray>()
+    private val frames = LinkedHashMap<String, Frame>(4, 0.75f, true)
     private val hideInfo: Runnable = Runnable { hideOverlay() }
     private val armScrub = Runnable {
         val exo = player ?: return@Runnable
@@ -142,6 +145,9 @@ class LanPlayActivity : Activity() {
         handler.removeCallbacks(hideInfo)
         handler.removeCallbacks(armScrub)
         handler.removeCallbacks(scrubTick)
+        playToken++
+        synchronized(frames) { imageToken++ }
+        dropImages()
         lockGuard.stop()
         releasePlayer()
         super.onStop()
@@ -214,14 +220,17 @@ class LanPlayActivity : Activity() {
         info?.visibility = View.GONE
         cues?.text = ""
         cues?.visibility = View.GONE
+        val token = ++playToken
+        val generation = synchronized(frames) { ++imageToken }
         releasePlayer()
         if (item.kind == SmbMedia.Kind.IMAGE) {
             surface?.visibility = View.GONE
             picture?.visibility = View.VISIBLE
             timeBar?.visibility = View.GONE
-            showImage(item)
+            showImage(item, generation)
             return
         }
+        dropImages()
         picture?.visibility = View.GONE
         surface?.visibility = View.VISIBLE
         timeBar?.visibility = View.VISIBLE
@@ -231,7 +240,7 @@ class LanPlayActivity : Activity() {
         Thread {
             val prepared = runCatching { prepareSubtitles(item) }.getOrNull()
             runOnUiThread {
-                if (current()?.url != item.url) return@runOnUiThread
+                if (token != playToken || isDestroyed || current()?.url != item.url) return@runOnUiThread
                 val subs = prepared?.first ?: emptyList()
                 val memory = prepared?.second ?: emptyMap()
                 startVideo(item, subs, memory)
@@ -242,57 +251,103 @@ class LanPlayActivity : Activity() {
                 SmbMedia.fileSize(item.url, LanPlayRequest.user, LanPlayRequest.pass)
             }.getOrDefault(-1L)
             runOnUiThread {
-                if (current()?.url != item.url) return@runOnUiThread
+                if (token != playToken || isDestroyed || current()?.url != item.url) return@runOnUiThread
                 fileBytes = size
                 if (info?.visibility == View.VISIBLE) info?.text = describe(item)
             }
         }.start()
     }
 
-    private fun showImage(item: SmbMedia.Entry) {
-        val ready = synchronized(images) { images[item.url] }
-        if (ready != null) {
+    private fun showImage(item: SmbMedia.Entry, generation: Int) {
+        val ready = synchronized(frames) { frames[item.url] }
+        if (ready != null && !ready.bitmap.isRecycled) {
             bindImage(item, ready)
-            prefetchAround()
+            prefetchAround(generation)
             return
         }
         Thread {
-            val bytes = SmbMedia.readAll(item.url, LanPlayRequest.user, LanPlayRequest.pass) ?: return@Thread
-            synchronized(images) {
-                images[item.url] = bytes
-                while (images.size > 4) images.remove(images.keys.first())
-            }
+            val frame = decodeImage(item.url) ?: return@Thread
+            val stored = synchronized(frames) {
+                if (generation != imageToken) {
+                    frame.bitmap.recycle()
+                    null
+                } else {
+                    rememberFrame(item.url, frame)
+                    frame
+                }
+            } ?: return@Thread
             runOnUiThread {
-                if (current()?.url != item.url) return@runOnUiThread
-                bindImage(item, bytes)
-                prefetchAround()
+                if (generation != imageToken || isDestroyed || current()?.url != item.url) return@runOnUiThread
+                bindImage(item, stored)
+                prefetchAround(generation)
             }
         }.start()
     }
 
-    private fun bindImage(item: SmbMedia.Entry, bytes: ByteArray) {
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return
-        picture?.setImageBitmap(bitmap)
-        fileBytes = bytes.size.toLong()
-        val resolution = if (bitmap.width > 0 && bitmap.height > 0) "${bitmap.width}×${bitmap.height}" else null
+    private fun bindImage(item: SmbMedia.Entry, frame: Frame) {
+        if (frame.bitmap.isRecycled) return
+        picture?.setImageBitmap(frame.bitmap)
+        fileBytes = frame.bytes
+        val resolution = if (frame.width > 0 && frame.height > 0) "${frame.width}×${frame.height}" else null
         info?.text = line(item.name, resolution, null, LanLibraryActivity.formatSize(fileBytes))
         reveal()
     }
 
-    private fun prefetchAround() {
+    private fun prefetchAround(generation: Int) {
         val index = LanPlayRequest.index
         for (next in intArrayOf(index - 1, index + 1)) {
             val item = LanPlayRequest.items.getOrNull(next) ?: continue
             if (item.kind != SmbMedia.Kind.IMAGE) continue
-            if (synchronized(images) { images.containsKey(item.url) }) continue
+            if (synchronized(frames) { frames.containsKey(item.url) }) continue
             Thread {
-                val bytes = SmbMedia.readAll(item.url, LanPlayRequest.user, LanPlayRequest.pass) ?: return@Thread
-                synchronized(images) {
-                    if (images.containsKey(item.url)) return@Thread
-                    images[item.url] = bytes
-                    while (images.size > 4) images.remove(images.keys.first())
+                if (generation != imageToken) return@Thread
+                val frame = decodeImage(item.url) ?: return@Thread
+                synchronized(frames) {
+                    if (generation != imageToken || frames.containsKey(item.url)) {
+                        frame.bitmap.recycle()
+                        return@Thread
+                    }
+                    rememberFrame(item.url, frame)
                 }
             }.start()
+        }
+    }
+
+    private fun decodeImage(url: String): Frame? {
+        val bytes = SmbMedia.readAll(url, LanPlayRequest.user, LanPlayRequest.pass, 32 * 1024 * 1024) ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val width = bounds.outWidth
+        val height = bounds.outHeight
+        if (width <= 0 || height <= 0) return null
+        val metrics = resources.displayMetrics
+        val maxW = metrics.widthPixels.coerceIn(1280, 3840)
+        val maxH = metrics.heightPixels.coerceIn(720, 2160)
+        var sample = 1
+        while (sample < 64 && (width / sample > maxW * 2 || height / sample > maxH * 2)) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+        return Frame(bitmap, width, height, bytes.size.toLong())
+    }
+
+    private fun rememberFrame(url: String, frame: Frame) {
+        val previous = frames.put(url, frame)
+        if (previous != null && previous.bitmap !== frame.bitmap && !previous.bitmap.isRecycled) {
+            previous.bitmap.recycle()
+        }
+        while (frames.size > 3) {
+            val eldest = frames.entries.first()
+            if (eldest.key == url) break
+            frames.remove(eldest.key)
+            if (!eldest.value.bitmap.isRecycled) eldest.value.bitmap.recycle()
+        }
+    }
+
+    private fun dropImages() {
+        picture?.setImageDrawable(null)
+        synchronized(frames) {
+            frames.values.forEach { if (!it.bitmap.isRecycled) it.bitmap.recycle() }
+            frames.clear()
         }
     }
 
@@ -301,7 +356,7 @@ class LanPlayActivity : Activity() {
         subs: List<MediaItem.SubtitleConfiguration>,
         memory: Map<String, ByteArray>
     ) {
-        if (current()?.url != item.url) return
+        if (isDestroyed || current()?.url != item.url) return
         playingUrl = item.url
         wantedSubtitle = subs.firstOrNull()?.label
         val builder = MediaItem.Builder()
@@ -621,6 +676,8 @@ class LanPlayActivity : Activity() {
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private class Frame(val bitmap: Bitmap, val width: Int, val height: Int, val bytes: Long)
 
     private class TimeBar(context: android.content.Context) : View(context) {
         private var positionMs = 0L
