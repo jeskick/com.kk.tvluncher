@@ -5,7 +5,7 @@
     <string name="settings">设置</string>
     <string name="all_apps">所有应用</string>
     <string name="add_app">添加应用</string>
-    <string name="dock_lan">KK 局域网</string>
+    <string name="dock_lan">KK内网游览</string>
     <string name="select_dock_apps">选择 Dock 应用</string>
     <string name="confirm">确认</string>
     <string name="cancel">取消</string>
