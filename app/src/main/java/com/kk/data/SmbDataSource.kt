@@ -24,7 +24,7 @@ class SmbDataSource(
     private var remaining = 0L
     private var started = false
     private var closed = true
-    private val ahead = ByteArray(1024 * 1024)
+    private val ahead = ByteArray(4 * 1024 * 1024)
     private var aheadPos = 0
     private var aheadLen = 0
     private val main = Handler(Looper.getMainLooper())

@@ -295,8 +295,8 @@ class LanPlayActivity : Activity() {
 
     private fun prefetchAround(generation: Int) {
         val index = LanPlayRequest.index
-        for (next in intArrayOf(index - 1, index + 1)) {
-            val item = LanPlayRequest.items.getOrNull(next) ?: continue
+        for (delta in intArrayOf(-1, 1, -2, 2, -3, 3)) {
+            val item = LanPlayRequest.items.getOrNull(index + delta) ?: continue
             if (item.kind != SmbMedia.Kind.IMAGE) continue
             if (synchronized(frames) { frames.containsKey(item.url) }) continue
             Thread {
@@ -314,20 +314,16 @@ class LanPlayActivity : Activity() {
     }
 
     private fun decodeImage(url: String): Frame? {
-        val bytes = SmbMedia.readAll(url, LanPlayRequest.user, LanPlayRequest.pass, 32 * 1024 * 1024) ?: return null
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        val width = bounds.outWidth
-        val height = bounds.outHeight
-        if (width <= 0 || height <= 0) return null
-        val metrics = resources.displayMetrics
-        val maxW = metrics.widthPixels.coerceIn(1280, 3840)
-        val maxH = metrics.heightPixels.coerceIn(720, 2160)
-        var sample = 1
-        while (sample < 64 && (width / sample > maxW * 2 || height / sample > maxH * 2)) sample *= 2
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
-        return Frame(bitmap, width, height, bytes.size.toLong())
+        val bytes = SmbMedia.readAll(url, LanPlayRequest.user, LanPlayRequest.pass, 128 * 1024 * 1024) ?: return null
+        return runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val width = bounds.outWidth
+            val height = bounds.outHeight
+            if (width <= 0 || height <= 0) return null
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+            Frame(bitmap, width, height, bytes.size.toLong())
+        }.getOrNull()
     }
 
     private fun rememberFrame(url: String, frame: Frame) {
@@ -335,7 +331,7 @@ class LanPlayActivity : Activity() {
         if (previous != null && previous.bitmap !== frame.bitmap && !previous.bitmap.isRecycled) {
             previous.bitmap.recycle()
         }
-        while (frames.size > 3) {
+        while (frames.size > 7) {
             val eldest = frames.entries.first()
             if (eldest.key == url) break
             frames.remove(eldest.key)
@@ -365,8 +361,9 @@ class LanPlayActivity : Activity() {
         mimeOf(item.name)?.let { builder.setMimeType(it) }
         val dataSource = PlaybackSource.Factory(LanPlayRequest.user, LanPlayRequest.pass, memory)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(20_000, 60_000, 8_000, 12_000)
-            .setTargetBufferBytes(48 * 1024 * 1024)
+            .setBufferDurationsMs(40_000, 120_000, 12_000, 20_000)
+            .setTargetBufferBytes(256 * 1024 * 1024)
+            .setBackBuffer(30_000, true)
             .setPrioritizeTimeOverSizeThresholds(false)
             .build()
         val exo = ExoPlayer.Builder(this)
