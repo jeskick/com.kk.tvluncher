@@ -175,10 +175,12 @@ class LanPlayActivity : Activity() {
         audioDropped = false
         reveal()
         Thread {
-            val prepared = prepareSubtitles(item)
+            val prepared = runCatching { prepareSubtitles(item) }.getOrNull()
             runOnUiThread {
                 if (current()?.url != item.url) return@runOnUiThread
-                startVideo(item, prepared.first, prepared.second)
+                val subs = prepared?.first ?: emptyList()
+                val memory = prepared?.second ?: emptyMap()
+                startVideo(item, subs, memory)
             }
         }.start()
         Thread {
@@ -371,8 +373,7 @@ class LanPlayActivity : Activity() {
             if (parts.size < 10) continue
             val start = srtTime(parts[1].trim()) ?: continue
             val end = srtTime(parts[2].trim()) ?: continue
-            val cue = parts[9]
-                .replace(Regex("\\{[^}]*}"), "")
+            val cue = stripAssTags(parts[9])
                 .replace("\\N", "\n", true)
                 .replace("\\n", "\n", true)
                 .replace("\\h", " ", true)
@@ -381,6 +382,23 @@ class LanPlayActivity : Activity() {
             out.append(index++).append('\n')
             out.append(start).append(" --> ").append(end).append('\n')
             out.append(cue).append("\n\n")
+        }
+        return out.toString()
+    }
+
+    private fun stripAssTags(text: String): String {
+        val out = StringBuilder(text.length)
+        var index = 0
+        while (index < text.length) {
+            if (text[index] == '{') {
+                val end = text.indexOf('}', index + 1)
+                if (end >= 0) {
+                    index = end + 1
+                    continue
+                }
+            }
+            out.append(text[index])
+            index++
         }
         return out.toString()
     }
